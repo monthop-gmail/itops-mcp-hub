@@ -31,12 +31,17 @@ interface ZabbixHost {
 interface ZabbixProblem {
   eventid: string;
   objectid: string;
+  object?: string;
   name: string;
   severity: string;
   clock: string;
   acknowledged: string;
-  hosts?: Array<{ hostid: string; host: string; name: string }>;
   tags?: Array<{ tag: string; value: string }>;
+}
+
+interface ZabbixTrigger {
+  triggerid: string;
+  hosts?: Array<{ hostid: string; host: string; name: string }>;
 }
 
 interface ZabbixItem {
@@ -82,18 +87,20 @@ export function registerZabbixTools(server: McpServer, client: ZabbixClient): vo
     async ({ severity_min }) => {
       try {
         const severities = severitiesFromMin(severity_min ?? 0);
+        // Zabbix 7 problem.get does not accept selectHosts (that belongs on trigger.get / event.get).
         const problems = await client.call<ZabbixProblem[]>("problem.get", {
-          output: ["eventid", "objectid", "name", "severity", "clock", "acknowledged", "suppressed"],
-          selectHosts: ["hostid", "host", "name"],
-          selectTags: "extend",
+          output: ["eventid", "objectid", "object", "name", "severity", "clock", "acknowledged"],
+          selectTags: ["tag", "value"],
           recent: false,
-          sortfield: ["eventid"],
+          sortfield: "eventid",
           sortorder: "DESC",
           severities,
         });
+        const hostsByTrigger = await loadHostsByTrigger(client, problems ?? []);
 
         const items = (problems ?? []).map((problem) => {
           const severity = Number(problem.severity);
+          const hosts = hostsByTrigger.get(problem.objectid) ?? [];
           return {
             eventid: problem.eventid,
             name: problem.name,
@@ -101,11 +108,7 @@ export function registerZabbixTools(server: McpServer, client: ZabbixClient): vo
             severity_name: SEVERITY_NAMES[severity] ?? "unknown",
             acknowledged: problem.acknowledged === "1",
             started_at: clockToIso(problem.clock),
-            hosts: (problem.hosts ?? []).map((host) => ({
-              hostid: host.hostid,
-              host: host.host,
-              name: host.name,
-            })),
+            hosts,
             tags: (problem.tags ?? []).map((tag) => ({ tag: tag.tag, value: tag.value })),
           };
         });
@@ -266,6 +269,40 @@ export function registerZabbixTools(server: McpServer, client: ZabbixClient): vo
       }
     },
   );
+}
+
+async function loadHostsByTrigger(
+  client: ZabbixClient,
+  problems: ZabbixProblem[],
+): Promise<Map<string, Array<{ hostid: string; host: string; name: string }>>> {
+  const triggerIds = [
+    ...new Set(
+      problems
+        .filter((problem) => (problem.object ?? "0") === "0" && problem.objectid)
+        .map((problem) => problem.objectid),
+    ),
+  ];
+  const hostsByTrigger = new Map<string, Array<{ hostid: string; host: string; name: string }>>();
+  if (triggerIds.length === 0) {
+    return hostsByTrigger;
+  }
+
+  const triggers = await client.call<ZabbixTrigger[]>("trigger.get", {
+    output: ["triggerid"],
+    triggerids: triggerIds,
+    selectHosts: ["hostid", "host", "name"],
+  });
+  for (const trigger of triggers ?? []) {
+    hostsByTrigger.set(
+      trigger.triggerid,
+      (trigger.hosts ?? []).map((host) => ({
+        hostid: host.hostid,
+        host: host.host,
+        name: host.name,
+      })),
+    );
+  }
+  return hostsByTrigger;
 }
 
 function mapZabbixError(tool: string, error: unknown) {
