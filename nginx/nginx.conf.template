@@ -15,7 +15,8 @@ http {
     charset       utf-8;
     map_hash_bucket_size 128;
 
-    log_format main '$remote_addr $mcp_role $request $status $body_bytes_sent rt=$request_time';
+    # Log only URI path (without query) to avoid leaking secrets in access logs.
+    log_format main '$remote_addr $mcp_role $request_method $uri $server_protocol $status $body_bytes_sent rt=$request_time';
     access_log /var/log/nginx/access.log main;
     underscores_in_headers on;
 
@@ -31,15 +32,8 @@ http {
         "Bearer ${ADMIN_TOKEN}" "admin";
     }
 
-    upstream mcp_hub_it {
-        server mcp-hub-it:3000;
-        keepalive 16;
-    }
-
-    upstream mcp_hub_admin {
-        server mcp-hub-admin:3000;
-        keepalive 16;
-    }
+    # Re-resolve Compose service names so recreate does not pin stale IPs.
+    resolver 127.0.0.11 valid=10s ipv6=off;
 
     upstream mcp_oauth {
         server mcp-oauth:3000;
@@ -124,7 +118,9 @@ http {
             error_page 401 = @error401_it;
             error_page 403 = @error403;
 
-            proxy_pass http://mcp_hub_it/;
+            set $mcp_it_upstream mcp-hub-it:3000;
+            rewrite ^/mcp/it/(.*)$ /$1 break;
+            proxy_pass http://$mcp_it_upstream;
             include /etc/nginx/mcp_proxy.conf;
         }
 
@@ -142,7 +138,9 @@ http {
             error_page 401 = @error401_admin;
             error_page 403 = @error403;
 
-            proxy_pass http://mcp_hub_admin/;
+            set $mcp_admin_upstream mcp-hub-admin:3000;
+            rewrite ^/mcp/admin/(.*)$ /$1 break;
+            proxy_pass http://$mcp_admin_upstream;
             include /etc/nginx/mcp_proxy.conf;
         }
 

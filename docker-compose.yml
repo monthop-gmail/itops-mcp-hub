@@ -190,6 +190,21 @@ services:
     volumes:
       - zabbix-server-data:/var/lib/zabbix
 
+  zabbix-agent:
+    image: zabbix/zabbix-agent2:alpine-7.0-latest
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      zabbix-server:
+        condition: service_started
+    environment:
+      TZ: ${TZ:-Asia/Bangkok}
+      ZBX_HOSTNAME: kknang-wsl
+      ZBX_SERVER_HOST: zabbix-server
+    expose:
+      - "10050"
+
   zabbix-web:
     image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
     restart: unless-stopped
