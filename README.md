@@ -284,6 +284,29 @@ If your client supports URL + headers natively:
 }
 ```
 
+### Connector policy (Bearer-only mode)
+
+This gateway is configured in strict mode:
+
+- OAuth shim endpoints are disabled.
+- Query token fallback (`?api_key=...`) is disabled.
+- Both IT and Admin require `Authorization: Bearer <token>`.
+
+If a connector UI supports only OAuth and cannot attach static headers, it is not compatible with this strict mode.
+
+For temporary troubleshooting only, you can open both hubs publicly (not recommended):
+
+```env
+ALLOW_PUBLIC_IT=true
+ALLOW_PUBLIC_ADMIN=true
+```
+
+Then restart `nginx`:
+
+```bash
+docker compose up -d --build --force-recreate nginx
+```
+
 ### LAN test without Cloudflare
 
 ```bash
