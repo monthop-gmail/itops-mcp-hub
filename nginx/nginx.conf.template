@@ -1,4 +1,4 @@
-# nginx.conf.template — envsubst replaces ${IT_TOKEN} and ${ADMIN_TOKEN} only.
+# nginx.conf.template — envsubst injects role tokens at container startup.
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
 pid /tmp/nginx.pid;
@@ -15,14 +15,10 @@ http {
     charset       utf-8;
     map_hash_bucket_size 128;
 
-    log_format main '$remote_addr $mcp_role $request $status $body_bytes_sent rt=$request_time';
+    # Log only URI path (without query) to avoid leaking secrets in access logs.
+    log_format main '$remote_addr $mcp_effective_role $request_method $uri $server_protocol $status $body_bytes_sent rt=$request_time';
     access_log /var/log/nginx/access.log main;
     underscores_in_headers on;
-
-    map $http_upgrade $connection_upgrade {
-        default upgrade;
-        ''      '';
-    }
 
     # Exact match of `Authorization: Bearer <token>` to an MCP role.
     map $http_authorization $mcp_role {
@@ -31,15 +27,51 @@ http {
         "Bearer ${ADMIN_TOKEN}" "admin";
     }
 
-    upstream mcp_hub_it {
-        server mcp-hub-it:3000;
-        keepalive 16;
+    # Header-only auth mode: only Authorization Bearer tokens are accepted.
+    map $mcp_role $mcp_effective_role {
+        default "";
+        "it"    "it";
+        "admin" "admin";
     }
 
-    upstream mcp_hub_admin {
-        server mcp-hub-admin:3000;
-        keepalive 16;
+    map "${ALLOW_PUBLIC_IT}" $allow_public_it {
+        default "false";
+        "true"  "true";
+        "1"     "true";
+        "yes"   "true";
+        "on"    "true";
     }
+
+    map "${ALLOW_PUBLIC_ADMIN}" $allow_public_admin {
+        default "false";
+        "true"  "true";
+        "1"     "true";
+        "yes"   "true";
+        "on"    "true";
+    }
+
+    map "$mcp_effective_role:$allow_public_it" $mcp_it_allowed {
+        default "false";
+        "~^(it|admin):" "true";
+        ":true" "true";
+    }
+
+    map "$mcp_effective_role:$allow_public_admin" $mcp_admin_status {
+        default "403";
+        ":false" "401";
+        "admin:false" "200";
+        ":true" "200";
+        "it:true" "200";
+        "admin:true" "200";
+    }
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      '';
+    }
+
+    # Re-resolve Compose service names so hub recreate does not pin stale IPs.
+    resolver 127.0.0.11 valid=10s ipv6=off;
 
     server {
         listen 80 default_server;
@@ -71,48 +103,44 @@ http {
         }
 
         location /mcp/it/ {
-            auth_request /_auth_it;
-            error_page 401 = @error401;
-            error_page 403 = @error403;
+            default_type application/json;
+            if ($mcp_it_allowed != "true") {
+                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
+                return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer only)"}';
+            }
 
-            proxy_pass http://mcp_hub_it/;
+            set $mcp_it_upstream mcp-hub-it:3000;
+            rewrite ^/mcp/it/(.*)$ /$1 break;
+            proxy_pass http://$mcp_it_upstream;
             include /etc/nginx/mcp_proxy.conf;
         }
 
         location /mcp/admin/ {
-            auth_request /_auth_admin;
-            error_page 401 = @error401;
-            error_page 403 = @error403;
+            default_type application/json;
+            if ($mcp_admin_status = "401") {
+                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
+                return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer only)"}';
+            }
+            if ($mcp_admin_status = "403") {
+                return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
+            }
 
-            proxy_pass http://mcp_hub_admin/;
+            set $mcp_admin_upstream mcp-hub-admin:3000;
+            rewrite ^/mcp/admin/(.*)$ /$1 break;
+            proxy_pass http://$mcp_admin_upstream;
             include /etc/nginx/mcp_proxy.conf;
         }
 
-        # Internal RBAC helpers — keep `if` out of proxy locations.
-        location = /_auth_it {
-            internal;
-            if ($mcp_role = "") { return 401; }
-            if ($mcp_role = "it") { return 200; }
-            if ($mcp_role = "admin") { return 200; }
-            return 403;
-        }
-
-        location = /_auth_admin {
-            internal;
-            if ($mcp_role = "") { return 401; }
-            if ($mcp_role = "admin") { return 200; }
-            return 403;
-        }
-
-        location @error401 {
+        # OAuth and query-token login shims are intentionally disabled.
+        # This gateway accepts only Authorization: Bearer <token>.
+        location ~ ^/(?:\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|openid-configuration)(?:/.*)?|mcp/(?:admin|it)/mcp/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|openid-configuration)/?)$ {
             default_type application/json;
-            add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
-            return 401 '{"error":"unauthorized","message":"Missing or invalid Authorization Bearer token"}';
+            return 404 '{"error":"not_found","message":"OAuth metadata is disabled; use Authorization Bearer tokens"}';
         }
 
-        location @error403 {
+        location ^~ /oauth/ {
             default_type application/json;
-            return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
+            return 403 '{"error":"forbidden","message":"OAuth endpoints are disabled; use Authorization Bearer tokens"}';
         }
 
         location / {

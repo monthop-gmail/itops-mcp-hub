@@ -34,6 +34,8 @@ services:
     environment:
       IT_TOKEN: ${IT_TOKEN}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
+      ALLOW_PUBLIC_IT: ${ALLOW_PUBLIC_IT:-false}
+      ALLOW_PUBLIC_ADMIN: ${ALLOW_PUBLIC_ADMIN:-false}
     ports:
       - "${MCP_LAN_PORT:-9080}:80"
     healthcheck:
@@ -169,6 +171,21 @@ services:
       - "${ZABBIX_SERVER_LAN_PORT:-10051}:10051"
     volumes:
       - zabbix-server-data:/var/lib/zabbix
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent2:alpine-7.0-latest
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      zabbix-server:
+        condition: service_started
+    environment:
+      TZ: ${TZ:-Asia/Bangkok}
+      ZBX_HOSTNAME: kknang-wsl
+      ZBX_SERVER_HOST: zabbix-server
+    expose:
+      - "10050"
 
   zabbix-web:
     image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
