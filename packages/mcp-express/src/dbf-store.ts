@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pickNumber, pickString, readDbfFile } from "./dbf.js";
 import type {
@@ -12,12 +12,15 @@ import type {
 const MASTER_TABLES = ["ARMAS", "APMAS", "STMAS", "GLMAS"] as const;
 
 function findTable(dir: string, base: string): string | null {
-  const names = [`${base}.DBF`, `${base}.dbf`, `${base}.Dbf`];
-  for (const name of names) {
-    const path = join(dir, name);
-    if (existsSync(path)) {
-      return path;
+  const wanted = `${base}.dbf`.toLowerCase();
+  try {
+    for (const name of readdirSync(dir)) {
+      if (name.toLowerCase() === wanted) {
+        return join(dir, name);
+      }
     }
+  } catch {
+    return null;
   }
   return null;
 }
@@ -47,7 +50,7 @@ function childDirectories(dir: string): string[] {
  * or DATA subdirectory. Prefer the folder with the most ARMAS/APMAS/STMAS/GLMAS.
  */
 export function resolveExpressDataDir(root: string): string {
-  const preferredNames = new Set(["data", "dbf", "company", "data1"]);
+  const preferredNames = new Set(["data", "dat", "dbf", "company", "data1"]);
   const candidates = [root, ...childDirectories(root)];
   let best = root;
   let bestScore = masterCount(root);
