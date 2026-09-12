@@ -253,6 +253,18 @@ If your client supports URL + headers natively:
 }
 ```
 
+### ChatGPT/Gemini connector fallback (OAuth-only UI)
+
+Some hosted connector UIs may not let you set a static `Authorization` header and only expose OAuth setup. For local testing, this gateway also accepts a query token:
+
+- Admin: `https://<public-host>/mcp/admin/mcp?api_key=<ADMIN_TOKEN>`
+- IT: `https://<public-host>/mcp/it/mcp?api_key=<IT_TOKEN>`
+
+Security notes:
+
+- Query tokens can be exposed by browser history and intermediary logs; treat them as secrets.
+- Rotate `IT_TOKEN` / `ADMIN_TOKEN` after testing.
+
 ### LAN test without Cloudflare
 
 ```bash

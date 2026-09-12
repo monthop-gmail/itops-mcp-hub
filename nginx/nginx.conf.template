@@ -15,20 +15,36 @@ http {
     charset       utf-8;
     map_hash_bucket_size 128;
 
-    log_format main '$remote_addr $mcp_role $request $status $body_bytes_sent rt=$request_time';
+    # Log only URI path (without query) to avoid leaking api_key in access logs.
+    log_format main '$remote_addr $mcp_effective_role $request_method $uri $server_protocol $status $body_bytes_sent rt=$request_time';
     access_log /var/log/nginx/access.log main;
     underscores_in_headers on;
-
-    map $http_upgrade $connection_upgrade {
-        default upgrade;
-        ''      '';
-    }
 
     # Exact match of `Authorization: Bearer <token>` to an MCP role.
     map $http_authorization $mcp_role {
         default                 "";
         "Bearer ${IT_TOKEN}"    "it";
         "Bearer ${ADMIN_TOKEN}" "admin";
+    }
+
+    # Fallback for clients/connectors that cannot set Authorization header:
+    # pass `?api_key=<IT_TOKEN|ADMIN_TOKEN>` in the MCP endpoint URL.
+    map $arg_api_key $mcp_role_from_query {
+        default                 "";
+        "${IT_TOKEN}"           "it";
+        "${ADMIN_TOKEN}"        "admin";
+    }
+
+    map "$mcp_role:$mcp_role_from_query" $mcp_effective_role {
+        default     "";
+        "~^(it|admin):"  $mcp_role;
+        ":it"            "it";
+        ":admin"         "admin";
+    }
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      '';
     }
 
     upstream mcp_hub_it {
@@ -71,48 +87,28 @@ http {
         }
 
         location /mcp/it/ {
-            auth_request /_auth_it;
-            error_page 401 = @error401;
-            error_page 403 = @error403;
+            default_type application/json;
+            if ($mcp_effective_role = "") {
+                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
+                return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer or api_key query)"}';
+            }
 
             proxy_pass http://mcp_hub_it/;
             include /etc/nginx/mcp_proxy.conf;
         }
 
         location /mcp/admin/ {
-            auth_request /_auth_admin;
-            error_page 401 = @error401;
-            error_page 403 = @error403;
+            default_type application/json;
+            if ($mcp_effective_role = "") {
+                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
+                return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer or api_key query)"}';
+            }
+            if ($mcp_effective_role != "admin") {
+                return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
+            }
 
             proxy_pass http://mcp_hub_admin/;
             include /etc/nginx/mcp_proxy.conf;
-        }
-
-        # Internal RBAC helpers — keep `if` out of proxy locations.
-        location = /_auth_it {
-            internal;
-            if ($mcp_role = "") { return 401; }
-            if ($mcp_role = "it") { return 200; }
-            if ($mcp_role = "admin") { return 200; }
-            return 403;
-        }
-
-        location = /_auth_admin {
-            internal;
-            if ($mcp_role = "") { return 401; }
-            if ($mcp_role = "admin") { return 200; }
-            return 403;
-        }
-
-        location @error401 {
-            default_type application/json;
-            add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
-            return 401 '{"error":"unauthorized","message":"Missing or invalid Authorization Bearer token"}';
-        }
-
-        location @error403 {
-            default_type application/json;
-            return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
         }
 
         location / {
