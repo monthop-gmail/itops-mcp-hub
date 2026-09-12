@@ -152,6 +152,9 @@ fi
 echo
 echo "== Gateway and RBAC checks =="
 http_check "gateway healthz" "200" "\"ok\":true" "${BASE_URL%/}/healthz"
+http_check "oauth authorization server metadata" "200" "authorization_endpoint" "${BASE_URL%/}/.well-known/oauth-authorization-server"
+http_check "oauth protected resource IT" "200" "\"resource\"" "${BASE_URL%/}/.well-known/oauth-protected-resource/mcp/it/mcp"
+http_check "oauth setup page" "200" "itops-public" "${BASE_URL%/}/oauth/setup"
 http_check "IT -> /mcp/it/" "200" "" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/"
 http_check "ADMIN -> /mcp/admin/" "200" "" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/"
 if is_truthy_flag "$ALLOW_PUBLIC_ADMIN_FLAG"; then
@@ -167,6 +170,13 @@ if is_truthy_flag "$ALLOW_PUBLIC_IT_FLAG"; then
 else
   http_check "no token -> /mcp/it/ (should be unauthorized)" "401" "" "${IT_URL}/"
   http_check "query api_key -> /mcp/it/ (disabled)" "401" "" "${IT_URL}/?api_key=${IT_TOKEN}"
+  UNAUTH_HEADERS="$TMP_DIR/it_mcp_unauth.headers"
+  curl -sS -o /dev/null -D "$UNAUTH_HEADERS" "${IT_URL}/mcp" || true
+  if grep -Fqi "resource_metadata" "$UNAUTH_HEADERS"; then
+    pass "IT /mcp 401 includes WWW-Authenticate resource_metadata"
+  else
+    fail "IT /mcp 401 missing WWW-Authenticate resource_metadata"
+  fi
 fi
 http_check "IT healthz" "200" "\"service\":\"mcp-hub-it\"" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/healthz"
 http_check "ADMIN healthz" "200" "\"service\":\"mcp-hub-admin\"" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/healthz"

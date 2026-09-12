@@ -1,4 +1,4 @@
-# nginx.conf.template — envsubst injects role tokens at container startup.
+# nginx.conf.template — envsubst replaces ${IT_TOKEN}, ${ADMIN_TOKEN}, ${PUBLIC_MCP_ORIGIN}.
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
 pid /tmp/nginx.pid;
@@ -16,9 +16,14 @@ http {
     map_hash_bucket_size 128;
 
     # Log only URI path (without query) to avoid leaking secrets in access logs.
-    log_format main '$remote_addr $mcp_effective_role $request_method $uri $server_protocol $status $body_bytes_sent rt=$request_time';
+    log_format main '$remote_addr $mcp_role $request_method $uri $server_protocol $status $body_bytes_sent rt=$request_time';
     access_log /var/log/nginx/access.log main;
     underscores_in_headers on;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      '';
+    }
 
     # Exact match of `Authorization: Bearer <token>` to an MCP role.
     map $http_authorization $mcp_role {
@@ -27,51 +32,13 @@ http {
         "Bearer ${ADMIN_TOKEN}" "admin";
     }
 
-    # Header-only auth mode: only Authorization Bearer tokens are accepted.
-    map $mcp_role $mcp_effective_role {
-        default "";
-        "it"    "it";
-        "admin" "admin";
-    }
-
-    map "${ALLOW_PUBLIC_IT}" $allow_public_it {
-        default "false";
-        "true"  "true";
-        "1"     "true";
-        "yes"   "true";
-        "on"    "true";
-    }
-
-    map "${ALLOW_PUBLIC_ADMIN}" $allow_public_admin {
-        default "false";
-        "true"  "true";
-        "1"     "true";
-        "yes"   "true";
-        "on"    "true";
-    }
-
-    map "$mcp_effective_role:$allow_public_it" $mcp_it_allowed {
-        default "false";
-        "~^(it|admin):" "true";
-        ":true" "true";
-    }
-
-    map "$mcp_effective_role:$allow_public_admin" $mcp_admin_status {
-        default "403";
-        ":false" "401";
-        "admin:false" "200";
-        ":true" "200";
-        "it:true" "200";
-        "admin:true" "200";
-    }
-
-    map $http_upgrade $connection_upgrade {
-        default upgrade;
-        ''      '';
-    }
-
-    # Re-resolve Compose service names so hub recreate does not pin stale IPs.
+    # Re-resolve Compose service names so recreate does not pin stale IPs.
     resolver 127.0.0.11 valid=10s ipv6=off;
+
+    upstream mcp_oauth {
+        server mcp-oauth:3000;
+        keepalive 8;
+    }
 
     server {
         listen 80 default_server;
@@ -94,6 +61,41 @@ http {
             return 200 '{"ok":true,"service":"itops-nginx-gateway"}';
         }
 
+        location ^~ /.well-known/oauth-authorization-server {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
+        location ^~ /.well-known/oauth-protected-resource {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
+        location = /.well-known/openid-configuration {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
+        location = /oauth/setup {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
+        location = /authorize {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
+        location = /token {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
+        location = /register {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
         location = /mcp/it {
             return 308 /mcp/it/;
         }
@@ -103,11 +105,18 @@ http {
         }
 
         location /mcp/it/ {
-            default_type application/json;
-            if ($mcp_it_allowed != "true") {
-                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
-                return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer only)"}';
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin * always;
+                add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type, MCP-Protocol-Version, mcp-session-id, Last-Event-ID" always;
+                add_header Access-Control-Max-Age 86400 always;
+                add_header Access-Control-Expose-Headers "WWW-Authenticate, mcp-session-id" always;
+                return 204;
             }
+
+            auth_request /_auth_it;
+            error_page 401 = @error401_it;
+            error_page 403 = @error403;
 
             set $mcp_it_upstream mcp-hub-it:3000;
             rewrite ^/mcp/it/(.*)$ /$1 break;
@@ -116,14 +125,18 @@ http {
         }
 
         location /mcp/admin/ {
-            default_type application/json;
-            if ($mcp_admin_status = "401") {
-                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
-                return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer only)"}';
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin * always;
+                add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type, MCP-Protocol-Version, mcp-session-id, Last-Event-ID" always;
+                add_header Access-Control-Max-Age 86400 always;
+                add_header Access-Control-Expose-Headers "WWW-Authenticate, mcp-session-id" always;
+                return 204;
             }
-            if ($mcp_admin_status = "403") {
-                return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
-            }
+
+            auth_request /_auth_admin;
+            error_page 401 = @error401_admin;
+            error_page 403 = @error403;
 
             set $mcp_admin_upstream mcp-hub-admin:3000;
             rewrite ^/mcp/admin/(.*)$ /$1 break;
@@ -131,16 +144,42 @@ http {
             include /etc/nginx/mcp_proxy.conf;
         }
 
-        # OAuth and query-token login shims are intentionally disabled.
-        # This gateway accepts only Authorization: Bearer <token>.
-        location ~ ^/(?:\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|openid-configuration)(?:/.*)?|mcp/(?:admin|it)/mcp/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|openid-configuration)/?)$ {
-            default_type application/json;
-            return 404 '{"error":"not_found","message":"OAuth metadata is disabled; use Authorization Bearer tokens"}';
+        # Internal RBAC helpers — keep `if` out of proxy locations except OPTIONS.
+        location = /_auth_it {
+            internal;
+            if ($mcp_role = "") { return 401; }
+            if ($mcp_role = "it") { return 200; }
+            if ($mcp_role = "admin") { return 200; }
+            return 403;
         }
 
-        location ^~ /oauth/ {
+        location = /_auth_admin {
+            internal;
+            if ($mcp_role = "") { return 401; }
+            if ($mcp_role = "admin") { return 200; }
+            return 403;
+        }
+
+        location @error401_it {
             default_type application/json;
-            return 403 '{"error":"forbidden","message":"OAuth endpoints are disabled; use Authorization Bearer tokens"}';
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Expose-Headers "WWW-Authenticate, mcp-session-id" always;
+            add_header WWW-Authenticate 'Bearer realm="itops-mcp", resource_metadata="${PUBLIC_MCP_ORIGIN}/.well-known/oauth-protected-resource/mcp/it/mcp", scope="mcp:it"' always;
+            return 401 '{"error":"unauthorized","message":"Missing or invalid Authorization Bearer token"}';
+        }
+
+        location @error401_admin {
+            default_type application/json;
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Expose-Headers "WWW-Authenticate, mcp-session-id" always;
+            add_header WWW-Authenticate 'Bearer realm="itops-mcp", resource_metadata="${PUBLIC_MCP_ORIGIN}/.well-known/oauth-protected-resource/mcp/admin/mcp", scope="mcp:admin"' always;
+            return 401 '{"error":"unauthorized","message":"Missing or invalid Authorization Bearer token"}';
+        }
+
+        location @error403 {
+            default_type application/json;
+            add_header Access-Control-Allow-Origin * always;
+            return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
         }
 
         location / {

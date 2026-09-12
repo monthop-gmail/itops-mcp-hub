@@ -7,10 +7,11 @@
     "packages/mcp-common",
     "packages/mcp-zabbix",
     "packages/mcp-meshcentral",
-    "packages/mcp-hub"
+    "packages/mcp-hub",
+    "packages/mcp-oauth"
   ],
   "scripts": {
-    "build": "npm run build -w @itops/mcp-common && npm run build -w @itops/mcp-zabbix && npm run build -w @itops/mcp-meshcentral && npm run build -w @itops/mcp-hub",
+    "build": "npm run build -w @itops/mcp-common && npm run build -w @itops/mcp-zabbix && npm run build -w @itops/mcp-meshcentral && npm run build -w @itops/mcp-hub && npm run build -w @itops/mcp-oauth",
     "typecheck": "npm run build"
   },
   "engines": {
