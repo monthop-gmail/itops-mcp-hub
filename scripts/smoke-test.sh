@@ -99,6 +99,7 @@ fi
 BASE_URL="${BASE_URL:-http://127.0.0.1:${MCP_LAN_PORT:-9080}}"
 IT_URL="${BASE_URL%/}/mcp/it"
 ADMIN_URL="${BASE_URL%/}/mcp/admin"
+ALLOW_PUBLIC_IT_FLAG="$(printf '%s' "${ALLOW_PUBLIC_IT:-false}" | tr '[:upper:]' '[:lower:]')"
 
 echo
 echo "== Service checks =="
@@ -146,7 +147,11 @@ http_check "gateway healthz" "200" "\"ok\":true" "${BASE_URL%/}/healthz"
 http_check "IT -> /mcp/it/" "200" "" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/"
 http_check "IT -> /mcp/admin/ (should be forbidden)" "403" "" -H "Authorization: Bearer $IT_TOKEN" "${ADMIN_URL}/"
 http_check "ADMIN -> /mcp/admin/" "200" "" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/"
-http_check "no token -> /mcp/it/ (should be unauthorized)" "401" "" "${IT_URL}/"
+if [ "$ALLOW_PUBLIC_IT_FLAG" = "true" ] || [ "$ALLOW_PUBLIC_IT_FLAG" = "1" ] || [ "$ALLOW_PUBLIC_IT_FLAG" = "yes" ] || [ "$ALLOW_PUBLIC_IT_FLAG" = "on" ]; then
+  http_check "no token -> /mcp/it/ (ALLOW_PUBLIC_IT enabled)" "200" "" "${IT_URL}/"
+else
+  http_check "no token -> /mcp/it/ (should be unauthorized)" "401" "" "${IT_URL}/"
+fi
 http_check "IT healthz" "200" "\"service\":\"mcp-hub-it\"" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/healthz"
 http_check "ADMIN healthz" "200" "\"service\":\"mcp-hub-admin\"" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/healthz"
 

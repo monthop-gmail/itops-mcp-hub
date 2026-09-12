@@ -42,6 +42,20 @@ http {
         ":admin"         "admin";
     }
 
+    map "${ALLOW_PUBLIC_IT}" $allow_public_it {
+        default "false";
+        "true"  "true";
+        "1"     "true";
+        "yes"   "true";
+        "on"    "true";
+    }
+
+    map "$mcp_effective_role:$allow_public_it" $mcp_it_allowed {
+        default "false";
+        "~^(it|admin):" "true";
+        ":true" "true";
+    }
+
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      '';
@@ -88,7 +102,7 @@ http {
 
         location /mcp/it/ {
             default_type application/json;
-            if ($mcp_effective_role = "") {
+            if ($mcp_it_allowed != "true") {
                 add_header WWW-Authenticate 'Bearer realm="itops-mcp", resource_metadata="https://$host/.well-known/oauth-protected-resource/mcp/it/mcp"' always;
                 return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer or api_key query)"}';
             }

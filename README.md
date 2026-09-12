@@ -265,6 +265,20 @@ Security notes:
 - Query tokens can be exposed by browser history and intermediary logs; treat them as secrets.
 - Rotate `IT_TOKEN` / `ADMIN_TOKEN` after testing.
 
+If a connector still cannot finish OAuth and cannot send static headers, you can allow unauthenticated access only on IT routes:
+
+```env
+ALLOW_PUBLIC_IT=true
+```
+
+Then restart `nginx`:
+
+```bash
+docker compose up -d --build --force-recreate nginx
+```
+
+This keeps `/mcp/admin/*` protected while making `/mcp/it/*` reachable without tokens.
+
 ### LAN test without Cloudflare
 
 ```bash

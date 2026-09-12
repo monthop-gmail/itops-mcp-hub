@@ -34,6 +34,7 @@ services:
     environment:
       IT_TOKEN: ${IT_TOKEN}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
+      ALLOW_PUBLIC_IT: ${ALLOW_PUBLIC_IT:-false}
     ports:
       - "${MCP_LAN_PORT:-9080}:80"
     healthcheck:
