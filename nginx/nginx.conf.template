@@ -50,10 +50,27 @@ http {
         "on"    "true";
     }
 
+    map "${ALLOW_PUBLIC_ADMIN}" $allow_public_admin {
+        default "false";
+        "true"  "true";
+        "1"     "true";
+        "yes"   "true";
+        "on"    "true";
+    }
+
     map "$mcp_effective_role:$allow_public_it" $mcp_it_allowed {
         default "false";
         "~^(it|admin):" "true";
         ":true" "true";
+    }
+
+    map "$mcp_effective_role:$allow_public_admin" $mcp_admin_status {
+        default "403";
+        ":false" "401";
+        "admin:false" "200";
+        ":true" "200";
+        "it:true" "200";
+        "admin:true" "200";
     }
 
     map $http_upgrade $connection_upgrade {
@@ -113,11 +130,11 @@ http {
 
         location /mcp/admin/ {
             default_type application/json;
-            if ($mcp_effective_role = "") {
+            if ($mcp_admin_status = "401") {
                 add_header WWW-Authenticate 'Bearer realm="itops-mcp", resource_metadata="https://$host/.well-known/oauth-protected-resource/mcp/admin/mcp"' always;
                 return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer or api_key query)"}';
             }
-            if ($mcp_effective_role != "admin") {
+            if ($mcp_admin_status = "403") {
                 return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
             }
 

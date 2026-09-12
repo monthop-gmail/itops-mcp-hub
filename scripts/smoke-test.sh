@@ -31,6 +31,13 @@ require_command() {
   fi
 }
 
+is_truthy_flag() {
+  case "$1" in
+    true|1|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 http_check() {
   local name="$1"
   local expected_code="$2"
@@ -100,6 +107,7 @@ BASE_URL="${BASE_URL:-http://127.0.0.1:${MCP_LAN_PORT:-9080}}"
 IT_URL="${BASE_URL%/}/mcp/it"
 ADMIN_URL="${BASE_URL%/}/mcp/admin"
 ALLOW_PUBLIC_IT_FLAG="$(printf '%s' "${ALLOW_PUBLIC_IT:-false}" | tr '[:upper:]' '[:lower:]')"
+ALLOW_PUBLIC_ADMIN_FLAG="$(printf '%s' "${ALLOW_PUBLIC_ADMIN:-false}" | tr '[:upper:]' '[:lower:]')"
 
 echo
 echo "== Service checks =="
@@ -145,9 +153,15 @@ echo
 echo "== Gateway and RBAC checks =="
 http_check "gateway healthz" "200" "\"ok\":true" "${BASE_URL%/}/healthz"
 http_check "IT -> /mcp/it/" "200" "" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/"
-http_check "IT -> /mcp/admin/ (should be forbidden)" "403" "" -H "Authorization: Bearer $IT_TOKEN" "${ADMIN_URL}/"
 http_check "ADMIN -> /mcp/admin/" "200" "" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/"
-if [ "$ALLOW_PUBLIC_IT_FLAG" = "true" ] || [ "$ALLOW_PUBLIC_IT_FLAG" = "1" ] || [ "$ALLOW_PUBLIC_IT_FLAG" = "yes" ] || [ "$ALLOW_PUBLIC_IT_FLAG" = "on" ]; then
+if is_truthy_flag "$ALLOW_PUBLIC_ADMIN_FLAG"; then
+  http_check "IT -> /mcp/admin/ (ALLOW_PUBLIC_ADMIN enabled)" "200" "" -H "Authorization: Bearer $IT_TOKEN" "${ADMIN_URL}/"
+  http_check "no token -> /mcp/admin/ (ALLOW_PUBLIC_ADMIN enabled)" "200" "" "${ADMIN_URL}/"
+else
+  http_check "IT -> /mcp/admin/ (should be forbidden)" "403" "" -H "Authorization: Bearer $IT_TOKEN" "${ADMIN_URL}/"
+  http_check "no token -> /mcp/admin/ (should be unauthorized)" "401" "" "${ADMIN_URL}/"
+fi
+if is_truthy_flag "$ALLOW_PUBLIC_IT_FLAG"; then
   http_check "no token -> /mcp/it/ (ALLOW_PUBLIC_IT enabled)" "200" "" "${IT_URL}/"
 else
   http_check "no token -> /mcp/it/ (should be unauthorized)" "401" "" "${IT_URL}/"

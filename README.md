@@ -269,6 +269,7 @@ If a connector still cannot finish OAuth and cannot send static headers, you can
 
 ```env
 ALLOW_PUBLIC_IT=true
+ALLOW_PUBLIC_ADMIN=false
 ```
 
 Then restart `nginx`:
@@ -278,6 +279,7 @@ docker compose up -d --build --force-recreate nginx
 ```
 
 This keeps `/mcp/admin/*` protected while making `/mcp/it/*` reachable without tokens.
+Only set `ALLOW_PUBLIC_ADMIN=true` for short-lived troubleshooting because it also allows IT/public traffic to reach admin MCP tools.
 
 ### LAN test without Cloudflare
 

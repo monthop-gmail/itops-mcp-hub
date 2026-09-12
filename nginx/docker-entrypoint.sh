@@ -11,7 +11,7 @@ if [ "$IT_TOKEN" = "$ADMIN_TOKEN" ]; then
   exit 1
 fi
 
-envsubst '${IT_TOKEN} ${ADMIN_TOKEN} ${ALLOW_PUBLIC_IT}' \
+envsubst '${IT_TOKEN} ${ADMIN_TOKEN} ${ALLOW_PUBLIC_IT} ${ALLOW_PUBLIC_ADMIN}' \
   < /etc/nginx/nginx.conf.template \
   > /etc/nginx/nginx.conf
 
