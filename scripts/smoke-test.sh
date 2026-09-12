@@ -160,11 +160,13 @@ if is_truthy_flag "$ALLOW_PUBLIC_ADMIN_FLAG"; then
 else
   http_check "IT -> /mcp/admin/ (should be forbidden)" "403" "" -H "Authorization: Bearer $IT_TOKEN" "${ADMIN_URL}/"
   http_check "no token -> /mcp/admin/ (should be unauthorized)" "401" "" "${ADMIN_URL}/"
+  http_check "query api_key -> /mcp/admin/ (disabled)" "401" "" "${ADMIN_URL}/?api_key=${ADMIN_TOKEN}"
 fi
 if is_truthy_flag "$ALLOW_PUBLIC_IT_FLAG"; then
   http_check "no token -> /mcp/it/ (ALLOW_PUBLIC_IT enabled)" "200" "" "${IT_URL}/"
 else
   http_check "no token -> /mcp/it/ (should be unauthorized)" "401" "" "${IT_URL}/"
+  http_check "query api_key -> /mcp/it/ (disabled)" "401" "" "${IT_URL}/?api_key=${IT_TOKEN}"
 fi
 http_check "IT healthz" "200" "\"service\":\"mcp-hub-it\"" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/healthz"
 http_check "ADMIN healthz" "200" "\"service\":\"mcp-hub-admin\"" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/healthz"

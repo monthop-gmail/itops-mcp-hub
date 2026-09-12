@@ -253,23 +253,21 @@ If your client supports URL + headers natively:
 }
 ```
 
-### ChatGPT/Gemini connector fallback (OAuth-only UI)
+### Connector policy (Bearer-only mode)
 
-Some hosted connector UIs may not let you set a static `Authorization` header and only expose OAuth setup. For local testing, this gateway also accepts a query token:
+This gateway is configured in strict mode:
 
-- Admin: `https://<public-host>/mcp/admin/mcp?api_key=<ADMIN_TOKEN>`
-- IT: `https://<public-host>/mcp/it/mcp?api_key=<IT_TOKEN>`
+- OAuth shim endpoints are disabled.
+- Query token fallback (`?api_key=...`) is disabled.
+- Both IT and Admin require `Authorization: Bearer <token>`.
 
-Security notes:
+If a connector UI supports only OAuth and cannot attach static headers, it is not compatible with this strict mode.
 
-- Query tokens can be exposed by browser history and intermediary logs; treat them as secrets.
-- Rotate `IT_TOKEN` / `ADMIN_TOKEN` after testing.
-
-If a connector still cannot finish OAuth and cannot send static headers, you can allow unauthenticated access only on IT routes:
+For temporary troubleshooting only, you can open both hubs publicly (not recommended):
 
 ```env
 ALLOW_PUBLIC_IT=true
-ALLOW_PUBLIC_ADMIN=false
+ALLOW_PUBLIC_ADMIN=true
 ```
 
 Then restart `nginx`:
@@ -277,9 +275,6 @@ Then restart `nginx`:
 ```bash
 docker compose up -d --build --force-recreate nginx
 ```
-
-This keeps `/mcp/admin/*` protected while making `/mcp/it/*` reachable without tokens.
-Only set `ALLOW_PUBLIC_ADMIN=true` for short-lived troubleshooting because it also allows IT/public traffic to reach admin MCP tools.
 
 ### LAN test without Cloudflare
 
