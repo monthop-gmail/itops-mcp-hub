@@ -1,4 +1,4 @@
-# nginx.conf.template — envsubst replaces ${IT_TOKEN} and ${ADMIN_TOKEN} only.
+# nginx.conf.template — envsubst injects role tokens at container startup.
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
 pid /tmp/nginx.pid;
@@ -89,7 +89,7 @@ http {
         location /mcp/it/ {
             default_type application/json;
             if ($mcp_effective_role = "") {
-                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
+                add_header WWW-Authenticate 'Bearer realm="itops-mcp", resource_metadata="https://$host/.well-known/oauth-protected-resource/mcp/it/mcp"' always;
                 return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer or api_key query)"}';
             }
 
@@ -100,7 +100,7 @@ http {
         location /mcp/admin/ {
             default_type application/json;
             if ($mcp_effective_role = "") {
-                add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
+                add_header WWW-Authenticate 'Bearer realm="itops-mcp", resource_metadata="https://$host/.well-known/oauth-protected-resource/mcp/admin/mcp"' always;
                 return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer or api_key query)"}';
             }
             if ($mcp_effective_role != "admin") {
@@ -109,6 +109,139 @@ http {
 
             proxy_pass http://mcp_hub_admin/;
             include /etc/nginx/mcp_proxy.conf;
+        }
+
+        # OAuth metadata shim for connector UIs that only support OAuth setup.
+        # Admin resource metadata (both URL patterns observed in hosted connectors)
+        location = /.well-known/oauth-protected-resource/mcp/admin/mcp {
+            default_type application/json;
+            return 200 '{"resource":"https://$host/mcp/admin/mcp","authorization_servers":["https://$host"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /mcp/admin/mcp/.well-known/oauth-protected-resource {
+            default_type application/json;
+            return 200 '{"resource":"https://$host/mcp/admin/mcp","authorization_servers":["https://$host"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.admin"]}';
+        }
+
+        # IT resource metadata
+        location = /.well-known/oauth-protected-resource/mcp/it/mcp {
+            default_type application/json;
+            return 200 '{"resource":"https://$host/mcp/it/mcp","authorization_servers":["https://$host"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.it"]}';
+        }
+        location = /mcp/it/mcp/.well-known/oauth-protected-resource {
+            default_type application/json;
+            return 200 '{"resource":"https://$host/mcp/it/mcp","authorization_servers":["https://$host"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.it"]}';
+        }
+
+        # Generic fallback metadata route.
+        location = /.well-known/oauth-protected-resource {
+            default_type application/json;
+            return 200 '{"resource":"https://$host/mcp/admin/mcp","authorization_servers":["https://$host"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.admin","mcp.it"]}';
+        }
+
+        # OAuth authorization server metadata
+        location = /.well-known/oauth-authorization-server {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin","mcp.it"]}';
+        }
+        location = /.well-known/oauth-authorization-server/mcp/admin/mcp {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /.well-known/oauth-authorization-server/mcp/it/mcp {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/it/authorize","token_endpoint":"https://$host/oauth/it/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.it"]}';
+        }
+        location = /mcp/admin/mcp/.well-known/oauth-authorization-server {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /mcp/it/mcp/.well-known/oauth-authorization-server {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/it/authorize","token_endpoint":"https://$host/oauth/it/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.it"]}';
+        }
+
+        # OIDC discovery aliases some clients try while discovering OAuth.
+        location = /.well-known/openid-configuration {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin","mcp.it"]}';
+        }
+        location = /.well-known/openid-configuration/mcp/admin/mcp {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /.well-known/openid-configuration/mcp/it/mcp {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/it/authorize","token_endpoint":"https://$host/oauth/it/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.it"]}';
+        }
+        location = /mcp/admin/mcp/.well-known/openid-configuration {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /mcp/it/mcp/.well-known/openid-configuration {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/it/authorize","token_endpoint":"https://$host/oauth/it/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.it"]}';
+        }
+
+        # Minimal authorize endpoint: immediately redirects with a temporary code.
+        location = /oauth/admin/authorize {
+            if ($arg_redirect_uri = "") {
+                return 400 "missing redirect_uri";
+            }
+            if ($arg_redirect_uri ~* "\\?") {
+                return 302 $arg_redirect_uri&code=admin-code&state=$arg_state;
+            }
+            return 302 $arg_redirect_uri?code=admin-code&state=$arg_state;
+        }
+        location = /oauth/it/authorize {
+            if ($arg_redirect_uri = "") {
+                return 400 "missing redirect_uri";
+            }
+            if ($arg_redirect_uri ~* "\\?") {
+                return 302 $arg_redirect_uri&code=it-code&state=$arg_state;
+            }
+            return 302 $arg_redirect_uri?code=it-code&state=$arg_state;
+        }
+
+        # Minimal token endpoint: exchanges code for role token.
+        location = /oauth/admin/token {
+            default_type application/json;
+            return 200 '{"access_token":"${ADMIN_TOKEN}","token_type":"Bearer","expires_in":3600,"scope":"mcp.admin","refresh_token":"admin-refresh"}';
+        }
+        location = /oauth/it/token {
+            default_type application/json;
+            return 200 '{"access_token":"${IT_TOKEN}","token_type":"Bearer","expires_in":3600,"scope":"mcp.it","refresh_token":"it-refresh"}';
+        }
+
+        # Minimal DCR response for clients that require registration.
+        location = /oauth/register {
+            default_type application/json;
+            return 201 '{"client_id":"itops-chatgpt-connector","client_secret_expires_at":0,"token_endpoint_auth_method":"none","grant_types":["authorization_code","refresh_token"],"response_types":["code"]}';
+        }
+
+        # Some clients append a trailing slash on metadata endpoints.
+        location = /mcp/admin/mcp/.well-known/oauth-protected-resource/ {
+            default_type application/json;
+            return 200 '{"resource":"https://$host/mcp/admin/mcp","authorization_servers":["https://$host"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /mcp/admin/mcp/.well-known/oauth-authorization-server/ {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /mcp/admin/mcp/.well-known/openid-configuration/ {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/admin/authorize","token_endpoint":"https://$host/oauth/admin/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.admin"]}';
+        }
+        location = /mcp/it/mcp/.well-known/oauth-protected-resource/ {
+            default_type application/json;
+            return 200 '{"resource":"https://$host/mcp/it/mcp","authorization_servers":["https://$host"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.it"]}';
+        }
+        location = /mcp/it/mcp/.well-known/oauth-authorization-server/ {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/it/authorize","token_endpoint":"https://$host/oauth/it/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.it"]}';
+        }
+        location = /mcp/it/mcp/.well-known/openid-configuration/ {
+            default_type application/json;
+            return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/it/authorize","token_endpoint":"https://$host/oauth/it/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.it"]}';
         }
 
         location / {
