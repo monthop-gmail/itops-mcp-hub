@@ -127,6 +127,72 @@ export function renderAuthorizePage(input: AuthorizePageInput): string {
 </html>`;
 }
 
+export function renderSetupPage(input: {
+  issuer: string;
+  mcpIt: string;
+  clientId: string;
+  clientSecret: string;
+}): string {
+  const row = (label: string, value: string) =>
+    `<tr><th>${escapeHtml(label)}</th><td><code>${escapeHtml(value)}</code></td></tr>`;
+  return `<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OAuth สำหรับ ChatGPT / Grok / Gemini</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { font-family: "Segoe UI", "Noto Sans Thai", system-ui, sans-serif; background: #0b1220; color: #e8eefc; margin: 0; }
+      main { max-width: 720px; margin: 0 auto; padding: 40px 20px 64px; }
+      p, li { color: #9aabcc; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #243049; vertical-align: top; }
+      code { font-family: ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+      .panel { background: #121a2b; border: 1px solid #243049; border-radius: 14px; padding: 16px 18px; margin: 16px 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ค่า OAuth สำหรับเชื่อม MCP</h1>
+      <p>ใช้กับ Grok / Gemini ที่ให้กรอก Client ID เอง. ChatGPT เลือก OAuth แล้วจะลงทะเบียนเอง (DCR) ไม่ต้องวางค่าเหล่านี้</p>
+      <div class="panel">
+        <table>
+          ${row("MCP URL (IT)", input.mcpIt)}
+          ${row("Client ID", input.clientId)}
+          ${row("Client Secret", input.clientSecret)}
+          ${row("Authorization Endpoint", `${input.issuer}/authorize`)}
+          ${row("Token Endpoint", `${input.issuer}/token`)}
+          ${row("Scopes", "mcp:it")}
+          ${row("Token Auth Method", "none (PKCE only)")}
+        </table>
+      </div>
+      <div class="panel">
+        <h2>ChatGPT</h2>
+        <ol>
+          <li>URL = MCP URL ด้านบน</li>
+          <li>Authentication = <strong>OAuth</strong> ไม่ใช่ Token</li>
+          <li>ครั้งแรกจะเปิดหน้าให้วาง <code>IT_TOKEN</code></li>
+        </ol>
+        <h2>Grok</h2>
+        <ol>
+          <li>วาง Client ID / Secret / Authorize / Token / scope <code>mcp:it</code></li>
+          <li>Token Auth Method = none (PKCE)</li>
+          <li>จากนั้นวาง <code>IT_TOKEN</code> บนหน้าเว็บของเรา</li>
+        </ol>
+        <h2>Gemini</h2>
+        <ol>
+          <li>เลือก OAuth 2.0 (มาตรฐาน) ไม่ใช่ API key</li>
+          <li>วาง Authorization URL, Token URL, Client ID, Client Secret</li>
+          <li>เปิด PKCE ถ้ามีช่องให้เปิด — scope <code>mcp:it</code></li>
+        </ol>
+      </div>
+      <p>อย่าใส่ ADMIN_TOKEN ในฟอร์มเหล่านี้ถ้าแค่ทดลองอ่านสถานะ</p>
+    </main>
+  </body>
+</html>`;
+}
+
 export function renderSimpleError(title: string, detail: string): string {
   return `<!DOCTYPE html>
 <html lang="th">

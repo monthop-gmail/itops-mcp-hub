@@ -126,6 +126,51 @@ async function main(): Promise<void> {
     throw new Error("IT token should be rejected on admin resource");
   }
 
+  const oidc = await fetch(`${base}/.well-known/openid-configuration`);
+  if (oidc.status !== 200) {
+    throw new Error(`openid-configuration ${oidc.status}`);
+  }
+  const setup = await fetch(`${base}/oauth/setup`);
+  const setupHtml = await setup.text();
+  if (setup.status !== 200 || !setupHtml.includes("itops-public")) {
+    throw new Error("setup page missing public client id");
+  }
+
+  const grokGrant = await fetch(`${base}/authorize`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: "itops-public",
+      redirect_uri: "https://grok.com/connectors/oauth/callback",
+      state: "grok-1",
+      resource: `${ISSUER}/mcp/it/mcp`,
+      scope: "mcp:it",
+      response_type: "code",
+      token: IT,
+    }),
+    redirect: "manual",
+  });
+  const grokLocation = grokGrant.headers.get("location") || "";
+  if (grokGrant.status !== 302 || !grokLocation.includes("code=")) {
+    throw new Error(`grok public client authorize ${grokGrant.status} ${grokLocation}`);
+  }
+  const grokCode = new URL(grokLocation).searchParams.get("code");
+  const grokToken = await fetch(`${base}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: "itops-public",
+      client_secret: "itops-public-secret",
+      code: grokCode || "",
+      redirect_uri: "https://grok.com/connectors/oauth/callback",
+    }),
+  });
+  const grokBody = (await grokToken.json()) as { access_token?: string };
+  if (grokToken.status !== 200 || grokBody.access_token !== IT) {
+    throw new Error(`grok token ${grokToken.status} ${JSON.stringify(grokBody)}`);
+  }
+
   server.close();
   console.log("oauth smoke ok");
 }

@@ -28,21 +28,20 @@ ChatGPT และ Grok.com ยิงจากคลาวด์ของเข�
 1. **Cloudflare Tunnel** ไปที่ Nginx ของไซต์นั้น (แนะนำ) — ดู README ส่วน Cloudflare Tunnel
 2. หรือ VPN เข้า LAN ของไซต์ แล้วใช้ไคลเอนต์ที่รันบนเครื่องใน VPN (Cursor / Grok desktop) ไม่ใช่ ChatGPT บนเว็บ
 
-ช่วงทดลองกับ ChatGPT / Grok.com:
+ช่วงทดลองกับ ChatGPT / Grok.com / Gemini:
 
-- เปิด tunnel ให้ hostname สาธารณะชี้ `http://nginx:80`
-- ตั้ง `PUBLIC_MCP_ORIGIN=https://<hostname>` ใน `.env` (ตัวอย่าง kknang: `https://mcp-kknang.sumana.org`)
-- **อย่าใส่ Cloudflare Access** บังคับ `CF-Access-Client-Id` / `CF-Access-Client-Secret` — คอนเนคเตอร์บนเว็บส่วนใหญ่ส่งได้แค่ `Authorization`
-- ครั้งแรกใช้หน้า `/authorize` วาง `IT_TOKEN` ไม่ต้องวางในช่อง Token ของ ChatGPT
-- แชร์เฉพาะ `IT_TOKEN` ของไซต์นั้น หมุนทิ้งหลังทดลอง
+ตรวจก่อนว่า OAuth ขึ้นแล้ว: เปิด `https://<hostname>/.well-known/oauth-authorization-server` ต้องได้ JSON ไม่ใช่ 404 `OAuth metadata is disabled`
 
-บนโฮสต์ไซต์หลัง `git pull`:
+ถ้ายัง 404 บนโฮสต์ไซต์:
 
 ```bash
-# ใน .env
+git pull
+# ใน .env ต้องมี
 # PUBLIC_MCP_ORIGIN=https://mcp-kknang.sumana.org
 docker compose up -d --build mcp-oauth nginx
 ```
+
+ช่วงทดลองกับคอนเนคเตอร์บนเว็บ อย่าบังคับ Cloudflare Access (ChatGPT/Grok/Gemini ส่ง extra CF-Access header ไม่ได้)
 
 เมื่ออยากใส่ Access อีกชั้น ให้ใช้ Cursor / Claude Desktop / Grok CLI ที่ตั้ง header เพิ่มได้ ไม่ใช่ ChatGPT web
 
@@ -90,11 +89,24 @@ MCP URL: https://<hostname>/mcp/it/mcp
 
 ### grok.com (custom connector)
 
+Grok เว็บไม่ใช้ DCR — ต้องวางค่าแอป OAuth เอง. หลังเกตเวย์มี OAuth แล้วเปิด `https://<hostname>/oauth/setup` หรือวาง:
+
+| ช่อง | ค่า |
+| --- | --- |
+| MCP URL | `https://<hostname>/mcp/it/mcp` |
+| Client ID | `itops-public` |
+| Client Secret | `itops-public-secret` (ว่างได้) |
+| Authorization Endpoint | `https://<hostname>/authorize` |
+| Token Endpoint | `https://<hostname>/token` |
+| Scopes | `mcp:it` (พิมพ์แล้วกด Enter) |
+| Token Auth Method | none (PKCE only) |
+
+จากนั้น Grok จะเปิดหน้าเว็บของเราให้วาง `IT_TOKEN`
+
 1. ไปที่ [grok.com/connectors](https://grok.com/connectors)
 2. **New Connector** → **Custom**
-3. URL: `https://<hostname>/mcp/it/mcp`
-4. Auth: **OAuth** — จะเปิดหน้า `/authorize` ให้วาง `IT_TOKEN`
-5. เซิร์ฟเวอร์ต้องเข้าถึงจากอินเทอร์เน็ตได้ (tunnel)
+3. ใส่ตารางด้านบน — อย่าเดา Client ID เอง
+4. เซิร์ฟเวอร์ต้องเข้าถึงจากอินเทอร์เน็ตได้ (tunnel)
 
 องค์กร Grok Business/Enterprise อาจต้องให้แอดมินโปรวิชันคอนเนคเตอร์ก่อนสมาชิกใช้
 
@@ -144,6 +156,23 @@ Cursor `.cursor/mcp.json` หรือ Claude ที่รองรับ URL + 
 ```
 
 Claude Desktop รุ่นที่พูด SSE อย่างเดียวให้ใช้ `/mcp/it/sse` ผ่าน `mcp-remote` ตาม README
+
+## Gemini
+
+Gemini ปฏิเสธ Bearer อย่างเดียว — ต้องเป็น OAuth 2.0 มาตรฐาน. หลังเกตเวย์มี discovery แล้ว:
+
+| ช่อง | ค่า |
+| --- | --- |
+| MCP Server URL | `https://<hostname>/mcp/it/mcp` |
+| Authentication | OAuth 2.0 |
+| Authorization URL | `https://<hostname>/authorize` |
+| Token URL | `https://<hostname>/token` |
+| Client ID | `itops-public` |
+| Client Secret | `itops-public-secret` |
+| Scopes | `mcp:it` |
+| PKCE | เปิดถ้ามีช่อง |
+
+ครั้งแรกจะเด้งหน้าให้วาง `IT_TOKEN` เหมือน Grok
 
 ## สิ่งที่อย่าทำตอนทดลอง
 

@@ -77,6 +77,16 @@ http {
             include /etc/nginx/oauth_proxy.conf;
         }
 
+        location = /.well-known/openid-configuration {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
+        location = /oauth/setup {
+            proxy_pass http://mcp_oauth;
+            include /etc/nginx/oauth_proxy.conf;
+        }
+
         location = /authorize {
             proxy_pass http://mcp_oauth;
             include /etc/nginx/oauth_proxy.conf;

@@ -13,7 +13,13 @@ const issuer = optionalEnv(
   hostname ? `https://${hostname}` : "http://127.0.0.1:9080",
 ).replace(/\/+$/, "");
 const port = Number(optionalEnv("PORT", "3000"));
-const app = createOauthApp({ issuer, itToken, adminToken });
+const app = createOauthApp({
+  issuer,
+  itToken,
+  adminToken,
+  publicClientId: optionalEnv("OAUTH_PUBLIC_CLIENT_ID", "itops-public"),
+  publicClientSecret: optionalEnv("OAUTH_PUBLIC_CLIENT_SECRET", "itops-public-secret"),
+});
 
 app.listen(port, "0.0.0.0", () => {
   log("info", "MCP OAuth server listening", { port, issuer });

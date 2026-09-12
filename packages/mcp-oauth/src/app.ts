@@ -1,7 +1,8 @@
 import express, { type Request, type Response } from "express";
 import { log } from "@itops/mcp-common";
 import { randomToken, safeEqual, sha256Base64Url } from "./crypto-util.js";
-import { renderAuthorizePage, renderSimpleError } from "./html.js";
+import { renderAuthorizePage, renderSetupPage, renderSimpleError } from "./html.js";
+import { isLoopbackHost, isTrustedRedirectUri } from "./redirects.js";
 import {
   CODE_TTL_MS,
   MemoryStore,
@@ -14,6 +15,8 @@ export interface OauthConfig {
   itToken: string;
   adminToken: string;
   accessTokenTtlSec?: number;
+  publicClientId?: string;
+  publicClientSecret?: string;
 }
 
 export type HubRole = "it" | "admin";
@@ -22,11 +25,10 @@ function jsonError(res: Response, status: number, error: string, detail?: string
   res.status(status).json(detail ? { error, error_description: detail } : { error });
 }
 
-function isLoopbackHost(hostname: string): boolean {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]" || hostname === "::1";
-}
-
 export function isRedirectUriAllowed(registered: string[], requested: string): boolean {
+  if (isTrustedRedirectUri(requested)) {
+    return true;
+  }
   let req: URL;
   try {
     req = new URL(requested);
@@ -174,7 +176,17 @@ function parseBasicClient(req: Request): { id?: string; secret?: string } {
 export function createOauthApp(config: OauthConfig): express.Express {
   const issuer = config.issuer.replace(/\/+$/, "");
   const accessTtl = config.accessTokenTtlSec ?? 8 * 60 * 60;
+  const publicClientId = config.publicClientId || "itops-public";
+  const publicClientSecret = config.publicClientSecret || "itops-public-secret";
   const store = new MemoryStore();
+  store.putClient({
+    clientId: publicClientId,
+    clientSecret: publicClientSecret,
+    clientName: "ChatGPT / Grok / Gemini",
+    redirectUris: [],
+    tokenEndpointAuthMethod: "none",
+    createdAt: Date.now(),
+  });
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", true);
@@ -183,6 +195,43 @@ export function createOauthApp(config: OauthConfig): express.Express {
   app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
   setInterval(() => store.prune(), 60_000).unref();
+
+  const isPublicClient = (clientId: string): boolean => clientId === publicClientId;
+
+  const resolveClient = (
+    clientId: string,
+    redirectUri: string,
+    clientName = "MCP client",
+  ): RegisteredClient | undefined => {
+    if (!clientId || !redirectUri) {
+      return undefined;
+    }
+    let client = store.getClient(clientId);
+    const trusted = isTrustedRedirectUri(redirectUri);
+    if (!client) {
+      if (!trusted) {
+        return undefined;
+      }
+      client = {
+        clientId,
+        clientSecret: isPublicClient(clientId) ? publicClientSecret : null,
+        clientName,
+        redirectUris: [redirectUri],
+        tokenEndpointAuthMethod: "none",
+        createdAt: Date.now(),
+      };
+      store.putClient(client);
+      log("info", "oauth client auto-provisioned", { clientId, redirectUri });
+      return client;
+    }
+    if (!isRedirectUriAllowed(client.redirectUris, redirectUri)) {
+      return undefined;
+    }
+    if (trusted && !client.redirectUris.includes(redirectUri)) {
+      client.redirectUris.push(redirectUri);
+    }
+    return client;
+  };
 
   const health = (_req: Request, res: Response) => {
     res.status(200).json({ ok: true, service: "mcp-oauth", issuer });
@@ -196,6 +245,20 @@ export function createOauthApp(config: OauthConfig): express.Express {
       res.status(200).json(asMetadata(issuer));
     },
   );
+  app.get("/.well-known/openid-configuration", (_req, res) => {
+    res.status(200).json(asMetadata(issuer));
+  });
+
+  app.get("/oauth/setup", (_req, res) => {
+    res.status(200).type("html").send(
+      renderSetupPage({
+        issuer,
+        mcpIt: `${issuer}/mcp/it/mcp`,
+        clientId: publicClientId,
+        clientSecret: publicClientSecret,
+      }),
+    );
+  });
 
   app.get(/^\/\.well-known\/oauth-protected-resource(?:\/(.*))?$/, (req, res) => {
     const suffix = typeof req.params[0] === "string" ? req.params[0] : "";
@@ -266,14 +329,14 @@ export function createOauthApp(config: OauthConfig): express.Express {
     const scope = formValue(req, "scope");
     const responseType = formValue(req, "response_type") || "code";
 
-    if (!clientId || !redirectUri || !codeChallenge) {
+    if (!clientId || !redirectUri) {
       res
         .status(400)
         .type("html")
         .send(
           renderSimpleError(
             "คำขอ OAuth ไม่ครบ",
-            "เปิดหน้านี้จาก ChatGPT / Grok / Cursor ตอนเชื่อม MCP ครั้งแรก — อย่าเปิด /authorize เปล่า ๆ",
+            "เปิดหน้านี้จาก ChatGPT / Grok / Gemini ตอนเชื่อม MCP ครั้งแรก — อย่าเปิด /authorize เปล่า ๆ",
           ),
         );
       return;
@@ -282,17 +345,26 @@ export function createOauthApp(config: OauthConfig): express.Express {
       jsonError(res, 400, "unsupported_response_type");
       return;
     }
-    if (codeChallengeMethod !== "S256") {
+    const publicish = isPublicClient(clientId) || isTrustedRedirectUri(redirectUri);
+    if (!codeChallenge && !publicish) {
+      res
+        .status(400)
+        .type("html")
+        .send(
+          renderSimpleError(
+            "คำขอ OAuth ไม่ครบ",
+            "ไคลเอนต์ต้องส่ง code_challenge (PKCE)",
+          ),
+        );
+      return;
+    }
+    if (codeChallenge && codeChallengeMethod !== "S256") {
       jsonError(res, 400, "invalid_request", "code_challenge_method must be S256");
       return;
     }
-    const client = store.getClient(clientId);
+    const client = resolveClient(clientId, redirectUri);
     if (!client) {
-      jsonError(res, 400, "invalid_client", "Unknown client_id — reconnect so the app can register");
-      return;
-    }
-    if (!isRedirectUriAllowed(client.redirectUris, redirectUri)) {
-      jsonError(res, 400, "invalid_request", "redirect_uri is not registered for this client");
+      jsonError(res, 400, "invalid_client", "Unknown client_id or redirect_uri is not allowed");
       return;
     }
 
@@ -325,8 +397,8 @@ export function createOauthApp(config: OauthConfig): express.Express {
     const resource = formValue(req, "resource");
     const scope = formValue(req, "scope");
     const token = formValue(req, "token").trim();
-    const client = store.getClient(clientId);
-    if (!client || !isRedirectUriAllowed(client.redirectUris, redirectUri) || !codeChallenge) {
+    const client = resolveClient(clientId, redirectUri);
+    if (!client || !codeChallenge && !isPublicClient(clientId) && !isTrustedRedirectUri(redirectUri)) {
       renderAuthorize(req, res, "คำขอหมดอายุหรือไม่ถูกต้อง — ให้ AI เชื่อมต่อใหม่");
       return;
     }
@@ -375,7 +447,12 @@ export function createOauthApp(config: OauthConfig): express.Express {
       jsonError(res, 401, "invalid_client");
       return;
     }
-    if (client.clientSecret && !safeEqual(clientSecret, client.clientSecret)) {
+    const publicish = isPublicClient(clientId);
+    if (client.clientSecret && clientSecret && !safeEqual(clientSecret, client.clientSecret)) {
+      jsonError(res, 401, "invalid_client");
+      return;
+    }
+    if (client.clientSecret && !clientSecret && !publicish && client.tokenEndpointAuthMethod !== "none") {
       jsonError(res, 401, "invalid_client");
       return;
     }
@@ -393,9 +470,11 @@ export function createOauthApp(config: OauthConfig): express.Express {
         jsonError(res, 400, "invalid_grant", "code expired");
         return;
       }
-      if (!verifier || sha256Base64Url(verifier) !== entry.codeChallenge) {
-        jsonError(res, 400, "invalid_grant", "PKCE verification failed");
-        return;
+      if (entry.codeChallenge) {
+        if (!verifier || sha256Base64Url(verifier) !== entry.codeChallenge) {
+          jsonError(res, 400, "invalid_grant", "PKCE verification failed");
+          return;
+        }
       }
       const refreshToken = randomToken(32);
       store.putRefresh({
