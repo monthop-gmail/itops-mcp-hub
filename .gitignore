@@ -9,3 +9,5 @@ meshcentral-files/
 meshcentral-backup/
 .zabbix-data/
 *.tsbuildinfo
+agent-tools/
+terminals/
