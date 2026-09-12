@@ -182,24 +182,15 @@ http {
             return 200 '{"issuer":"https://$host","authorization_endpoint":"https://$host/oauth/it/authorize","token_endpoint":"https://$host/oauth/it/token","registration_endpoint":"https://$host/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256","plain"],"scopes_supported":["mcp.it"]}';
         }
 
-        # Minimal authorize endpoint: immediately redirects with a temporary code.
+        # Minimal authorize endpoint:
+        # decode redirect_uri client-side then redirect with a temporary code.
         location = /oauth/admin/authorize {
-            if ($arg_redirect_uri = "") {
-                return 400 "missing redirect_uri";
-            }
-            if ($arg_redirect_uri ~* "\\?") {
-                return 302 $arg_redirect_uri&code=admin-code&state=$arg_state;
-            }
-            return 302 $arg_redirect_uri?code=admin-code&state=$arg_state;
+            default_type text/html;
+            return 200 '<!doctype html><html><head><meta charset="utf-8"><title>Signing in...</title></head><body><script>(function(){const url=new URL(window.location.href);let redirect=url.searchParams.get("redirect_uri")||"";const state=url.searchParams.get("state")||"";if(!redirect){document.body.textContent="Missing redirect_uri";return;}for(let i=0;i<3;i++){try{const dec=decodeURIComponent(redirect);if(dec===redirect)break;redirect=dec;}catch(_e){break;}}if(!/^https?:\\/\\//i.test(redirect)){document.body.textContent="Invalid redirect_uri";return;}const sep=redirect.includes("?")?"&":"?";window.location.replace(redirect+sep+"code=admin-code&state="+encodeURIComponent(state));})();</script></body></html>';
         }
         location = /oauth/it/authorize {
-            if ($arg_redirect_uri = "") {
-                return 400 "missing redirect_uri";
-            }
-            if ($arg_redirect_uri ~* "\\?") {
-                return 302 $arg_redirect_uri&code=it-code&state=$arg_state;
-            }
-            return 302 $arg_redirect_uri?code=it-code&state=$arg_state;
+            default_type text/html;
+            return 200 '<!doctype html><html><head><meta charset="utf-8"><title>Signing in...</title></head><body><script>(function(){const url=new URL(window.location.href);let redirect=url.searchParams.get("redirect_uri")||"";const state=url.searchParams.get("state")||"";if(!redirect){document.body.textContent="Missing redirect_uri";return;}for(let i=0;i<3;i++){try{const dec=decodeURIComponent(redirect);if(dec===redirect)break;redirect=dec;}catch(_e){break;}}if(!/^https?:\\/\\//i.test(redirect)){document.body.textContent="Invalid redirect_uri";return;}const sep=redirect.includes("?")?"&":"?";window.location.replace(redirect+sep+"code=it-code&state="+encodeURIComponent(state));})();</script></body></html>';
         }
 
         # Minimal token endpoint: exchanges code for role token.
