@@ -180,6 +180,17 @@ Create **two** Access service tokens if you want to rotate IT and Admin Cloudfla
 
 Nginx already sets `proxy_buffering off`, `gzip off`, `X-Accel-Buffering: no`, and 1-hour proxy timeouts. In the tunnel hostname, do not enable extra buffering or “HTTP/2 to origin” if SSE stalls; HTTP/1.1 to nginx is the safe origin protocol.
 
+## Team trial: ChatGPT / Grok (read-only)
+
+ขณะรอ **ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged) ทีมทดลองบน ChatGPT / Grok ได้ **เฉพาะเส้น IT**
+
+- ส่ง `IT_TOKEN` + `https://<tunnel-host>/mcp/it/mcp` เท่านั้น — ห้าม `ADMIN_TOKEN` และห้าม `/mcp/admin/`
+- ChatGPT และ Grok.com ยิงจากคลาวด์ ต้องมี Cloudflare Tunnel; `127.0.0.1:9080` ใช้ได้แค่ไคลเอนต์ที่รันใน LAN/VPN
+- ช่วงทดลองกับคอนเนคเตอร์บนเว็บ อย่าบังคับ Cloudflare Access (ส่ง extra header ไม่ได้) — ใช้ Nginx Bearer
+- ขั้นตอนวางคอนเนคเตอร์และตัวอย่างคำถามอยู่ที่ [docs/TEAM-CONNECT.md](docs/TEAM-CONNECT.md)
+
+`meshcentral_run_shell` ยังปิดสำหรับทีมทดลองจนกว่าจะมี payload-hash approval + human queue + audit
+
 ## MCP client configuration
 
 Replace host, tokens, and Cloudflare service-token values. Claude Desktop still uses the legacy SSE transport (`/sse`). Newer clients can use Streamable HTTP (`/mcp`).
