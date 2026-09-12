@@ -13,6 +13,7 @@ http {
     sendfile      on;
     server_tokens off;
     charset       utf-8;
+    map_hash_bucket_size 128;
 
     log_format main '$remote_addr $mcp_role $request $status $body_bytes_sent rt=$request_time';
     access_log /var/log/nginx/access.log main;

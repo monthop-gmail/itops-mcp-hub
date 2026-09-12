@@ -288,6 +288,17 @@ scripts/create-zabbix-api-token.mjs
 - After changing MeshCentral hostname or published HTTPS port, update `config.json` in the `meshcentral-data` volume (`aliasPort` / `cert`) so agent download URLs stay correct.
 - Logs are JSON lines from the Node services and json-file rotated at 10 MB × 3.
 
+### Nested Docker / CI hosts
+
+If containers start but Nginx cannot reach `mcp-hub-*` (SSE hangs after a 200 auth, ping between containers fails), the kernel is filtering bridged traffic:
+
+```bash
+sudo sysctl -w net.bridge.bridge-nf-call-iptables=0
+sudo sysctl -w net.bridge.bridge-nf-call-ip6tables=0
+```
+
+This is a host setting, not a Compose service setting. Normal bare-metal or VM Docker installs already have working inter-container connectivity.
+
 ## License
 
 Internal operations tooling. Review Zabbix and MeshCentral licenses for the upstream images.
