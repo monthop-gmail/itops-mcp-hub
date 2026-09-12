@@ -70,15 +70,8 @@ http {
         ''      '';
     }
 
-    upstream mcp_hub_it {
-        server mcp-hub-it:3000;
-        keepalive 16;
-    }
-
-    upstream mcp_hub_admin {
-        server mcp-hub-admin:3000;
-        keepalive 16;
-    }
+    # Re-resolve Compose service names so hub recreate does not pin stale IPs.
+    resolver 127.0.0.11 valid=10s ipv6=off;
 
     server {
         listen 80 default_server;
@@ -116,7 +109,9 @@ http {
                 return 401 '{"error":"unauthorized","message":"Missing or invalid token (Authorization Bearer only)"}';
             }
 
-            proxy_pass http://mcp_hub_it/;
+            set $mcp_it_upstream mcp-hub-it:3000;
+            rewrite ^/mcp/it/(.*)$ /$1 break;
+            proxy_pass http://$mcp_it_upstream;
             include /etc/nginx/mcp_proxy.conf;
         }
 
@@ -130,7 +125,9 @@ http {
                 return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
             }
 
-            proxy_pass http://mcp_hub_admin/;
+            set $mcp_admin_upstream mcp-hub-admin:3000;
+            rewrite ^/mcp/admin/(.*)$ /$1 break;
+            proxy_pass http://$mcp_admin_upstream;
             include /etc/nginx/mcp_proxy.conf;
         }
 
