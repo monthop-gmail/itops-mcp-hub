@@ -1,10 +1,10 @@
 # IT Operations Hub
 
-เกตเวย์ MCP รวมศูนย์สำหรับงาน IT Operations — เอเจนต์ AI คุยกับ **Zabbix 7** (observability) และ **MeshCentral** (inventory / remote ops) ผ่าน SSE และ Streamable HTTP หลัง Cloudflare Tunnel และ Nginx RBAC
+เกตเวย์ MCP รวมศูนย์สำหรับงาน IT Operations และบัญชี Express — เอเจนต์ AI คุยกับ **Zabbix 7**, **MeshCentral**, และ **Express Accounting** (express.co.th) ผ่าน SSE และ Streamable HTTP หลัง Cloudflare Tunnel และ Nginx RBAC
 
 A production Docker Compose stack:
 
-`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR, SSE/WebSocket) → mcp-hub-it | mcp-hub-admin → sub-mcp-zabbix | sub-mcp-meshcentral → Zabbix / MeshCentral`
+`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR, SSE/WebSocket) → mcp-hub-it | mcp-hub-admin | mcp-hub-accounting → sub-mcp-zabbix | sub-mcp-meshcentral | sub-mcp-express → Zabbix / MeshCentral / Express books`
 
 All services share a single bridge network, `infra-net`. MCP hubs and databases are not published on the host. Only LAN/VPN ports for the gateway, Zabbix, and MeshCentral agents are bound.
 
@@ -19,30 +19,39 @@ Cloudflare Zero Trust  ──tunnel──► cloudflared
         v
 Nginx :80 (internal) / MCP_LAN_PORT on the host
   OAuth  /authorize /token /register /.well-known/*  → mcp-oauth (token-paste page)
-  Bearer IT_TOKEN  → role it     → /mcp/it/*      (it + admin)
-  Bearer ADMIN_TOKEN → role admin → /mcp/admin/*  (admin only)
+  Bearer IT_TOKEN          → role it          → /mcp/it/*          (it + admin)
+  Bearer ADMIN_TOKEN       → role admin       → /mcp/admin/*       (admin only)
+  Bearer ACCOUNTING_TOKEN  → role accounting  → /mcp/accounting/*  (accounting only)
         |
-        +--> mcp-hub-it:3000      read-only tool set
-        +--> mcp-hub-admin:3000   read-only + meshcentral_run_shell
+        +--> mcp-hub-it:3000           Zabbix + MeshCentral inventory
+        +--> mcp-hub-admin:3000        same + meshcentral_run_shell
+        +--> mcp-hub-accounting:3000   Express Accounting read-only
                     |
-                    +--> sub-mcp-zabbix       JSON-RPC 2.0
-                    +--> sub-mcp-meshcentral  /control.ashx WebSocket
+                    +--> sub-mcp-zabbix / sub-mcp-meshcentral
+                    +--> sub-mcp-express   fixture | http adapter | DBF
                               |
                               +--> zabbix-web / zabbix-server / zabbix-db
                               +--> meshcentral
+                              +--> Express books (sample, sidecar REST, or .DBF)
 ```
 
 ### Tools
 
-| Tool | IT hub | Admin hub |
-| --- | --- | --- |
-| `zabbix_get_active_problems(severity_min?)` | yes | yes |
-| `zabbix_get_device_status(group_name?)` | yes | yes |
-| `zabbix_get_metrics(host_name, item_keys)` | yes | yes |
-| `meshcentral_get_inventory()` | yes | yes |
-| `meshcentral_run_shell(node_id, command)` | no | yes |
+| Tool | IT hub | Admin hub | Accounting hub |
+| --- | --- | --- | --- |
+| `zabbix_get_active_problems(severity_min?)` | yes | yes | no |
+| `zabbix_get_device_status(group_name?)` | yes | yes | no |
+| `zabbix_get_metrics(host_name, item_keys)` | yes | yes | no |
+| `meshcentral_get_inventory()` | yes | yes | no |
+| `meshcentral_run_shell(node_id, command)` | no | yes | no |
+| `express_get_status()` | no | no | yes |
+| `express_list_customers(query?, limit?)` | no | no | yes |
+| `express_list_vendors(query?, limit?)` | no | no | yes |
+| `express_list_items(query?, limit?)` | no | no | yes |
+| `express_list_ar_invoices(status?, query?, limit?)` | no | no | yes |
+| `express_list_gl_accounts(query?, limit?)` | no | no | yes |
 
-Nginx rejects an IT token on `/mcp/admin/` with HTTP 403. The IT hub process does not register the shell tool.
+Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Express tools are read-only; see [docs/EXPRESS.md](docs/EXPRESS.md).
 
 ## Requirements
 
@@ -65,6 +74,7 @@ Edit `.env`:
    ```bash
    openssl rand -hex 32   # IT_TOKEN
    openssl rand -hex 32   # ADMIN_TOKEN
+   openssl rand -hex 32   # ACCOUNTING_TOKEN
    ```
 
 2. Set `ZABBIX_DB_PASSWORD` and MeshCentral `MESHCENTRAL_PASSWORD` / `MESHCENTRAL_API_KEY`.
@@ -175,7 +185,7 @@ Cloudflare consumes the service token headers at the edge. Configure the applica
 | `Authorization` | **Must pass through unmodified** — Nginx maps this to `it` / `admin` |
 | `CF-Access-Jwt-Assertion` | Set by Cloudflare after a successful Access login |
 
-If Access strips `Authorization`, Nginx will 401 every MCP call. Add `Authorization` to the allowed/forwarded header list, or put the MCP Bearer token in a second Access-approved header and change Nginx — this repo expects `Authorization: Bearer <IT_TOKEN|ADMIN_TOKEN>`.
+If Access strips `Authorization`, Nginx will 401 every MCP call. Add `Authorization` to the allowed/forwarded header list, or put the MCP Bearer token in a second Access-approved header and change Nginx — this repo expects `Authorization: Bearer <IT_TOKEN|ADMIN_TOKEN|ACCOUNTING_TOKEN>`.
 
 Create **two** Access service tokens if you want to rotate IT and Admin Cloudflare identities independently of the MCP RBAC tokens.
 
@@ -191,6 +201,7 @@ Nginx already sets `proxy_buffering off`, `gzip off`, `X-Accel-Buffering: no`, a
 - ครั้งแรกเบราว์เซอร์เปิด `https://<tunnel-host>/authorize` ให้วาง `IT_TOKEN` เหมือน ai-collaboration-mcp
 - ตั้ง `PUBLIC_MCP_ORIGIN=https://<tunnel-host>` ใน `.env` แล้ว recreate `mcp-oauth` + `nginx`
 - ห้าม `ADMIN_TOKEN` และห้าม `/mcp/admin/` สำหรับทีมทดลอง
+- ทีมบัญชีใช้เส้นแยก `https://<tunnel-host>/mcp/accounting/mcp` + `ACCOUNTING_TOKEN` + scope `mcp:accounting` — ดู [docs/EXPRESS.md](docs/EXPRESS.md)
 - ขั้นตอนละเอียดอยู่ที่ [docs/TEAM-CONNECT.md](docs/TEAM-CONNECT.md)
 
 `meshcentral_run_shell` ยังปิดสำหรับทีมทดลองจนกว่าจะมี payload-hash approval + human queue + audit
@@ -256,12 +267,10 @@ If your client supports URL + headers natively:
 ```json
 {
   "mcpServers": {
-    "itops-admin": {
-      "url": "https://mcp.example.com/mcp/admin/mcp",
+    "itops-accounting": {
+      "url": "https://mcp.example.com/mcp/accounting/mcp",
       "headers": {
-        "Authorization": "Bearer ADMIN_TOKEN_HERE",
-        "CF-Access-Client-Id": "CLIENT_ID.access",
-        "CF-Access-Client-Secret": "CLIENT_SECRET"
+        "Authorization": "Bearer ACCOUNTING_TOKEN_HERE"
       }
     }
   }
@@ -279,6 +288,13 @@ curl -sS -D- -o /dev/null \
   -H "Authorization: Bearer $IT_TOKEN" \
   http://127.0.0.1:9080/mcp/admin/
 # expect 403 on the admin path
+curl -sS -D- -o /dev/null \
+  -H "Authorization: Bearer $IT_TOKEN" \
+  http://127.0.0.1:9080/mcp/accounting/
+# expect 403 — books are not an IT role
+curl -sS -D- -o /dev/null \
+  -H "Authorization: Bearer $ACCOUNTING_TOKEN" \
+  http://127.0.0.1:9080/mcp/accounting/
 ```
 
 ## Repository layout
@@ -291,14 +307,16 @@ packages/
   mcp-common/             # Streamable HTTP + SSE helper
   mcp-zabbix/             # Zabbix JSON-RPC tools
   mcp-meshcentral/        # MeshCentral control.ashx tools
-  mcp-hub/                # aggregator; HUB_ROLE=it|admin
-  mcp-oauth/              # OAuth 2.1 + DCR; /authorize asks for IT/ADMIN token
+  mcp-express/            # Express Accounting (fixture / HTTP / DBF)
+  mcp-hub/                # aggregator; HUB_ROLE=it|admin|accounting
+  mcp-oauth/              # OAuth 2.1 + DCR; /authorize asks for site token
 scripts/create-zabbix-api-token.mjs
+docs/EXPRESS.md           # Express Accounting backends and RBAC
 ```
 
 ## Operations notes
 
-- Rotate `IT_TOKEN` / `ADMIN_TOKEN` by changing `.env` and `docker compose up -d --force-recreate nginx`.
+- Rotate `IT_TOKEN` / `ADMIN_TOKEN` / `ACCOUNTING_TOKEN` by changing `.env` and `docker compose up -d --force-recreate nginx mcp-oauth`.
 - Do not publish `mcp-hub-*`, `sub-mcp-*`, or `zabbix-db` to the internet.
 - `meshcentral_run_shell` runs as SYSTEM/root (`runAsUser: 0`) on the agent. Treat `ADMIN_TOKEN` like production break-glass.
 - After changing MeshCentral hostname or published HTTPS port, update `config.json` in the `meshcentral-data` volume (`aliasPort` / `cert`) so agent download URLs stay correct.

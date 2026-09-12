@@ -14,12 +14,13 @@ export interface OauthConfig {
   issuer: string;
   itToken: string;
   adminToken: string;
+  accountingToken: string;
   accessTokenTtlSec?: number;
   publicClientId?: string;
   publicClientSecret?: string;
 }
 
-export type HubRole = "it" | "admin";
+export type HubRole = "it" | "admin" | "accounting";
 
 function jsonError(res: Response, status: number, error: string, detail?: string): void {
   res.status(status).json(detail ? { error, error_description: detail } : { error });
@@ -66,9 +67,12 @@ export function isRedirectUriAllowed(registered: string[], requested: string): b
   return false;
 }
 
-function roleHintFromResource(resource: string): "it" | "admin" | "either" {
+function roleHintFromResource(resource: string): "it" | "admin" | "accounting" | "either" {
   if (resource.includes("/mcp/admin")) {
     return "admin";
+  }
+  if (resource.includes("/mcp/accounting")) {
+    return "accounting";
   }
   if (resource.includes("/mcp/it")) {
     return "it";
@@ -85,6 +89,9 @@ function matchSiteToken(
   }
   if (presented && safeEqual(presented, config.itToken)) {
     return { role: "it", accessToken: config.itToken };
+  }
+  if (presented && safeEqual(presented, config.accountingToken)) {
+    return { role: "accounting", accessToken: config.accountingToken };
   }
   return null;
 }
@@ -119,7 +126,7 @@ function asMetadata(issuer: string) {
     grant_types_supported: ["authorization_code", "refresh_token"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     code_challenge_methods_supported: ["S256"],
-    scopes_supported: ["mcp:it", "mcp:admin"],
+    scopes_supported: ["mcp:it", "mcp:admin", "mcp:accounting"],
     authorization_response_iss_parameter_supported: true,
     client_id_metadata_document_supported: false,
   };
@@ -254,6 +261,7 @@ export function createOauthApp(config: OauthConfig): express.Express {
       renderSetupPage({
         issuer,
         mcpIt: `${issuer}/mcp/it/mcp`,
+        mcpAccounting: `${issuer}/mcp/accounting/mcp`,
         clientId: publicClientId,
         clientSecret: publicClientSecret,
       }),
@@ -263,12 +271,18 @@ export function createOauthApp(config: OauthConfig): express.Express {
   app.get(/^\/\.well-known\/oauth-protected-resource(?:\/(.*))?$/, (req, res) => {
     const suffix = typeof req.params[0] === "string" ? req.params[0] : "";
     if (!suffix) {
-      res.status(200).json(protectedResource(issuer, issuer, ["mcp:it", "mcp:admin"]));
+      res.status(200).json(
+        protectedResource(issuer, issuer, ["mcp:it", "mcp:admin", "mcp:accounting"]),
+      );
       return;
     }
     const resourcePath = suffix.startsWith("/") ? suffix : `/${suffix}`;
     const resource = `${issuer}${resourcePath}`;
-    const scopes = resourcePath.includes("/admin") ? ["mcp:admin"] : ["mcp:it"];
+    const scopes = resourcePath.includes("/accounting")
+      ? ["mcp:accounting"]
+      : resourcePath.includes("/admin")
+        ? ["mcp:admin"]
+        : ["mcp:it"];
     res.status(200).json(protectedResource(issuer, resource, scopes));
   });
 
@@ -413,8 +427,22 @@ export function createOauthApp(config: OauthConfig): express.Express {
       renderAuthorize(req, res, "เส้น /mcp/admin ต้องใช้ ADMIN_TOKEN");
       return;
     }
+    if (hint === "accounting" && matched.role !== "accounting") {
+      renderAuthorize(req, res, "เส้น /mcp/accounting ต้องใช้ ACCOUNTING_TOKEN — ห้ามใช้โทเคน IT/admin");
+      return;
+    }
+    if ((hint === "it" || hint === "admin") && matched.role === "accounting") {
+      renderAuthorize(req, res, "ACCOUNTING_TOKEN ใช้ได้เฉพาะเส้น /mcp/accounting");
+      return;
+    }
     const issuedScope =
-      matched.role === "admin" ? "mcp:admin" : scope.includes("mcp:admin") ? "mcp:it" : scope || "mcp:it";
+      matched.role === "admin"
+        ? "mcp:admin"
+        : matched.role === "accounting"
+          ? "mcp:accounting"
+          : scope.includes("mcp:admin")
+            ? "mcp:it"
+            : scope || "mcp:it";
     const code = randomToken(32);
     store.putCode({
       code,

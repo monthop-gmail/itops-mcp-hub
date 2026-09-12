@@ -1,9 +1,11 @@
 # ทีมทดลอง MCP บน ChatGPT / Grok (read-only)
 
-ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
+ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / Express Accounting ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
 
-สรุปสั้น: **ลองได้** ถ้าต่อเส้น IT อย่างเดียว (`/mcp/it/`) และมี URL แบบ HTTPS ที่อินเทอร์เน็ตถึงได้  
+สรุปสั้น: **ลองได้** ถ้าต่อเส้นที่ตรงบทบาท (`/mcp/it/` หรือ `/mcp/accounting/`) และมี URL แบบ HTTPS ที่อินเทอร์เน็ตถึงได้  
 ยัง **ห้าม** ส่ง `ADMIN_TOKEN` หรือเปิด `meshcentral_run_shell`
+
+งาน IT กับสมุดบัญชี **คนละโทเคน คนละ URL** — ดู [EXPRESS.md](EXPRESS.md)
 
 ## สิ่งที่ทีมจะเห็น
 
@@ -17,6 +19,8 @@
 | `meshcentral_get_inventory` | รายการเครื่องใน MeshCentral |
 
 ถ้า AI เห็นเครื่องมือที่ 5 (`meshcentral_run_shell`) แปลว่าต่อผิดเส้น — ถอดออกทันที
+
+ทีมบัญชีเห็นเฉพาะเครื่องมือ `express_*` บน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
 
 ## สิ่งที่ยังใช้ไม่ได้จนกว่าจะมี tunnel
 
@@ -55,6 +59,16 @@ MCP URL: https://<hostname>/mcp/it/mcp
 บทบาท: IT read-only
 วิธีใส่โทเคน: เชื่อมด้วย OAuth แล้ววาง IT_TOKEN บนหน้าเว็บ /authorize
 อย่าใช้: /mcp/admin/ และ ADMIN_TOKEN
+```
+
+สำหรับบัญชี (Express):
+
+```
+MCP URL: https://<hostname>/mcp/accounting/mcp
+บทบาท: accounting read-only
+วิธีใส่โทเคน: OAuth แล้ววาง ACCOUNTING_TOKEN
+scope: mcp:accounting
+อย่าใช้: IT_TOKEN / ADMIN_TOKEN / /mcp/it/ / /mcp/admin/
 ```
 
 แต่ละไซต์มี token ของตัวเอง อย่าคัดลอกของ kknang ไปไซต์อื่น
@@ -181,6 +195,8 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 - อย่าเปิด `meshcentral_run_shell` — รอสัญญา approval + คิวคน + audit จาก ai-tools-mcp
 - อย่าเปิด Zabbix UI (`:9443`) หรือ MeshCentral (`:9444`) ออกอินเทอร์เน็ต เปิดเฉพาะ MCP gateway
 - อย่าใส่ token ใน URL (`?api_key=`) — โผล่ในล็อกพร็อกซี
+- อย่าใช้ `IT_TOKEN` กับ `/mcp/accounting/` และอย่าใช้ `ACCOUNTING_TOKEN` กับเส้น IT
+- ค่าเริ่ม Express เป็นข้อมูล **fixture** (`sample: true`) จนกว่าไซต์จะต่อ HTTP หรือ DBF จริง
 
 ## เมื่อไหร่ต้องรอ ai-tools-mcp
 
@@ -188,6 +204,8 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 | --- | --- |
 | อ่านปัญหา / สถานะเครื่อง / inventory | ได้ หลังมี HTTPS + IT token |
 | ให้ทีม ChatGPT / Grok ช่วยดูไซต์ | ได้ บนเส้น IT |
+| อ่านลูกหนี้ / สินค้า / GL จาก Express | ได้ บน `/mcp/accounting/mcp` (ค่าเริ่มเป็นข้อมูลตัวอย่าง) |
 | สั่งคำสั่งบนเครื่องผ่าน MeshCentral | ยังไม่ได้ — รอ approval |
+| ลงรายการขายหรือแก้ไขสมุด Express | ไม่มีใน MCP นี้ — อ่านอย่างเดียว |
 
 `ai-collaboration-mcp` เป็นที่คุยงานของเอเจนต์ ไม่ใช่รันไทม์เครื่องมือ IT

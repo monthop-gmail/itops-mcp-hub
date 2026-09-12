@@ -10,7 +10,7 @@ export interface AuthorizePageInput {
   resource: string;
   scope: string;
   responseType: string;
-  roleHint: "it" | "admin" | "either";
+  roleHint: "it" | "admin" | "accounting" | "either";
   error?: string;
 }
 
@@ -22,15 +22,19 @@ export function renderAuthorizePage(input: AuthorizePageInput): string {
   const roleLabel =
     input.roleHint === "admin"
       ? "ADMIN_TOKEN"
-      : input.roleHint === "it"
-        ? "IT_TOKEN"
-        : "IT_TOKEN หรือ ADMIN_TOKEN";
+      : input.roleHint === "accounting"
+        ? "ACCOUNTING_TOKEN"
+        : input.roleHint === "it"
+          ? "IT_TOKEN"
+          : "IT_TOKEN, ADMIN_TOKEN หรือ ACCOUNTING_TOKEN";
   const blurb =
     input.roleHint === "admin"
-      ? "URL นี้เป็นเส้น admin — วางเฉพาะ ADMIN_TOKEN ไม่ใช่โทเคน IT"
-      : input.roleHint === "it"
-        ? "URL นี้เป็นเส้น IT (อ่านอย่างเดียว) — วาง IT_TOKEN (ADMIN_TOKEN ก็ใช้ได้บนเส้นนี้)"
-        : "วางโทเคน IT หรือ admin ตามบทบาทที่ต้องการ";
+      ? "URL นี้เป็นเส้น admin — วางเฉพาะ ADMIN_TOKEN ไม่ใช่โทเคน IT หรือบัญชี"
+      : input.roleHint === "accounting"
+        ? "URL นี้เป็นเส้นบัญชี Express Accounting — วาง ACCOUNTING_TOKEN ไม่ใช่ IT/ADMIN"
+        : input.roleHint === "it"
+          ? "URL นี้เป็นเส้น IT (อ่านอย่างเดียว) — วาง IT_TOKEN (ADMIN_TOKEN ก็ใช้ได้บนเส้นนี้)"
+          : "วางโทเคนตามบทบาทที่ต้องการ — IT, admin หรือบัญชี Express";
   const error = input.error
     ? `<p class="error">${escapeHtml(input.error)}</p>`
     : "";
@@ -130,6 +134,7 @@ export function renderAuthorizePage(input: AuthorizePageInput): string {
 export function renderSetupPage(input: {
   issuer: string;
   mcpIt: string;
+  mcpAccounting: string;
   clientId: string;
   clientSecret: string;
 }): string {
@@ -159,11 +164,12 @@ export function renderSetupPage(input: {
       <div class="panel">
         <table>
           ${row("MCP URL (IT)", input.mcpIt)}
+          ${row("MCP URL (บัญชี Express)", input.mcpAccounting)}
           ${row("Client ID", input.clientId)}
           ${row("Client Secret", input.clientSecret)}
           ${row("Authorization Endpoint", `${input.issuer}/authorize`)}
           ${row("Token Endpoint", `${input.issuer}/token`)}
-          ${row("Scopes", "mcp:it")}
+          ${row("Scopes", "mcp:it หรือ mcp:accounting")}
           ${row("Token Auth Method", "none (PKCE only)")}
         </table>
       </div>
@@ -172,7 +178,7 @@ export function renderSetupPage(input: {
         <ol>
           <li>URL = MCP URL ด้านบน</li>
           <li>Authentication = <strong>OAuth</strong> ไม่ใช่ Token</li>
-          <li>ครั้งแรกจะเปิดหน้าให้วาง <code>IT_TOKEN</code></li>
+          <li>ครั้งแรกจะเปิดหน้าให้วาง <code>IT_TOKEN</code> (เส้น IT) หรือ <code>ACCOUNTING_TOKEN</code> (เส้นบัญชี)</li>
         </ol>
         <h2>Grok</h2>
         <ol>
@@ -187,7 +193,7 @@ export function renderSetupPage(input: {
           <li>เปิด PKCE ถ้ามีช่องให้เปิด — scope <code>mcp:it</code></li>
         </ol>
       </div>
-      <p>อย่าใส่ ADMIN_TOKEN ในฟอร์มเหล่านี้ถ้าแค่ทดลองอ่านสถานะ</p>
+      <p>อย่าใส่ ADMIN_TOKEN ในฟอร์มเหล่านี้ถ้าแค่ทดลองอ่านสถานะ และอย่าใช้โทเคน IT กับสมุดบัญชี Express</p>
     </main>
   </body>
 </html>`;

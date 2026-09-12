@@ -15,7 +15,7 @@ export interface AuthCode {
   resource: string;
   scope: string;
   accessToken: string;
-  role: "it" | "admin";
+  role: "it" | "admin" | "accounting";
   expiresAt: number;
 }
 
@@ -23,7 +23,7 @@ export interface RefreshGrant {
   refreshToken: string;
   clientId: string;
   accessToken: string;
-  role: "it" | "admin";
+  role: "it" | "admin" | "accounting";
   resource: string;
   scope: string;
   expiresAt: number;
