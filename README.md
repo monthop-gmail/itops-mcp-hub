@@ -4,20 +4,21 @@
 
 A production Docker Compose stack:
 
-`Cloudflare Tunnel → Nginx (Bearer RBAC, SSE/WebSocket) → mcp-hub-it | mcp-hub-admin → sub-mcp-zabbix | sub-mcp-meshcentral → Zabbix / MeshCentral`
+`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR, SSE/WebSocket) → mcp-hub-it | mcp-hub-admin → sub-mcp-zabbix | sub-mcp-meshcentral → Zabbix / MeshCentral`
 
 All services share a single bridge network, `infra-net`. MCP hubs and databases are not published on the host. Only LAN/VPN ports for the gateway, Zabbix, and MeshCentral agents are bound.
 
 ## Architecture
 
 ```
-AI agents (Claude Desktop, Cursor, custom)
-        |  HTTPS + CF-Access-Client-* + Authorization: Bearer
+AI agents (Claude Desktop, Cursor, ChatGPT, Grok)
+        |  HTTPS  (+ OAuth DCR token page, or Authorization: Bearer)
         v
 Cloudflare Zero Trust  ──tunnel──► cloudflared
         |
         v
 Nginx :80 (internal) / MCP_LAN_PORT on the host
+  OAuth  /authorize /token /register /.well-known/*  → mcp-oauth (token-paste page)
   Bearer IT_TOKEN  → role it     → /mcp/it/*      (it + admin)
   Bearer ADMIN_TOKEN → role admin → /mcp/admin/*  (admin only)
         |
@@ -149,6 +150,8 @@ This is the public path for AI clients. MeshCentral agents and Zabbix pollers st
    - The connector runs **inside** `infra-net`, so it must use the Compose service name `nginx`, not a host port.
 4. `docker compose --profile tunnel up -d`
 
+Set `PUBLIC_MCP_ORIGIN=https://mcp.example.com` (the same public hostname) so ChatGPT/Grok OAuth discovery advertises the real URL. Then recreate `mcp-oauth` and `nginx`.
+
 Optional origin settings in the hostname:
 
 - HTTP Host Header: `mcp.example.com`
@@ -184,10 +187,11 @@ Nginx already sets `proxy_buffering off`, `gzip off`, `X-Accel-Buffering: no`, a
 
 ขณะรอ **ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged) ทีมทดลองบน ChatGPT / Grok ได้ **เฉพาะเส้น IT**
 
-- ส่ง `IT_TOKEN` + `https://<tunnel-host>/mcp/it/mcp` เท่านั้น — ห้าม `ADMIN_TOKEN` และห้าม `/mcp/admin/`
-- ChatGPT และ Grok.com ยิงจากคลาวด์ ต้องมี Cloudflare Tunnel; `127.0.0.1:9080` ใช้ได้แค่ไคลเอนต์ที่รันใน LAN/VPN
-- ช่วงทดลองกับคอนเนคเตอร์บนเว็บ อย่าบังคับ Cloudflare Access (ส่ง extra header ไม่ได้) — ใช้ Nginx Bearer
-- ขั้นตอนวางคอนเนคเตอร์และตัวอย่างคำถามอยู่ที่ [docs/TEAM-CONNECT.md](docs/TEAM-CONNECT.md)
+- URL: `https://<tunnel-host>/mcp/it/mcp` — เลือก **OAuth** (อย่าเลือก Token ใน ChatGPT ถ้าต้องการหน้าเว็บ)
+- ครั้งแรกเบราว์เซอร์เปิด `https://<tunnel-host>/authorize` ให้วาง `IT_TOKEN` เหมือน ai-collaboration-mcp
+- ตั้ง `PUBLIC_MCP_ORIGIN=https://<tunnel-host>` ใน `.env` แล้ว recreate `mcp-oauth` + `nginx`
+- ห้าม `ADMIN_TOKEN` และห้าม `/mcp/admin/` สำหรับทีมทดลอง
+- ขั้นตอนละเอียดอยู่ที่ [docs/TEAM-CONNECT.md](docs/TEAM-CONNECT.md)
 
 `meshcentral_run_shell` ยังปิดสำหรับทีมทดลองจนกว่าจะมี payload-hash approval + human queue + audit
 
@@ -288,6 +292,7 @@ packages/
   mcp-zabbix/             # Zabbix JSON-RPC tools
   mcp-meshcentral/        # MeshCentral control.ashx tools
   mcp-hub/                # aggregator; HUB_ROLE=it|admin
+  mcp-oauth/              # OAuth 2.1 + DCR; /authorize asks for IT/ADMIN token
 scripts/create-zabbix-api-token.mjs
 ```
 

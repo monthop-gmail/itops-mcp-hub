@@ -6,6 +6,7 @@ RUN apk add --no-cache gettext \
 
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 COPY mcp_proxy.conf /etc/nginx/mcp_proxy.conf
+COPY oauth_proxy.conf /etc/nginx/oauth_proxy.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 COPY html/ /usr/share/nginx/html/
 

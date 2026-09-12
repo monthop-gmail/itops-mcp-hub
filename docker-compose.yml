@@ -20,6 +20,22 @@ services:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
 
+  mcp-oauth:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-oauth
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    environment:
+      PORT: "3000"
+      IT_TOKEN: ${IT_TOKEN}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      PUBLIC_MCP_ORIGIN: ${PUBLIC_MCP_ORIGIN:-}
+      PUBLIC_MCP_HOSTNAME: ${PUBLIC_MCP_HOSTNAME:-}
+
   nginx:
     build:
       context: ./nginx
@@ -31,9 +47,13 @@ services:
         condition: service_healthy
       mcp-hub-admin:
         condition: service_healthy
+      mcp-oauth:
+        condition: service_healthy
     environment:
       IT_TOKEN: ${IT_TOKEN}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
+      PUBLIC_MCP_ORIGIN: ${PUBLIC_MCP_ORIGIN:-}
+      PUBLIC_MCP_HOSTNAME: ${PUBLIC_MCP_HOSTNAME:-}
     ports:
       - "${MCP_LAN_PORT:-9080}:80"
     healthcheck:

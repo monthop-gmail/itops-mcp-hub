@@ -31,9 +31,18 @@ ChatGPT และ Grok.com ยิงจากคลาวด์ของเข�
 ช่วงทดลองกับ ChatGPT / Grok.com:
 
 - เปิด tunnel ให้ hostname สาธารณะชี้ `http://nginx:80`
+- ตั้ง `PUBLIC_MCP_ORIGIN=https://<hostname>` ใน `.env` (ตัวอย่าง kknang: `https://mcp-kknang.sumana.org`)
 - **อย่าใส่ Cloudflare Access** บังคับ `CF-Access-Client-Id` / `CF-Access-Client-Secret` — คอนเนคเตอร์บนเว็บส่วนใหญ่ส่งได้แค่ `Authorization`
-- อาศัย Nginx Bearer (`IT_TOKEN`) เป็นตัวล็อก
+- ครั้งแรกใช้หน้า `/authorize` วาง `IT_TOKEN` ไม่ต้องวางในช่อง Token ของ ChatGPT
 - แชร์เฉพาะ `IT_TOKEN` ของไซต์นั้น หมุนทิ้งหลังทดลอง
+
+บนโฮสต์ไซต์หลัง `git pull`:
+
+```bash
+# ใน .env
+# PUBLIC_MCP_ORIGIN=https://mcp-kknang.sumana.org
+docker compose up -d --build mcp-oauth nginx
+```
 
 เมื่ออยากใส่ Access อีกชั้น ให้ใช้ Cursor / Claude Desktop / Grok CLI ที่ตั้ง header เพิ่มได้ ไม่ใช่ ChatGPT web
 
@@ -45,7 +54,7 @@ ChatGPT และ Grok.com ยิงจากคลาวด์ของเข�
 ไซต์: kknang          (อย่าใช้ token นี้กับ ICB / MTR / NST)
 MCP URL: https://<hostname>/mcp/it/mcp
 บทบาท: IT read-only
-Authorization: Bearer <IT_TOKEN>
+วิธีใส่โทเคน: เชื่อมด้วย OAuth แล้ววาง IT_TOKEN บนหน้าเว็บ /authorize
 อย่าใช้: /mcp/admin/ และ ADMIN_TOKEN
 ```
 
@@ -63,11 +72,13 @@ Authorization: Bearer <IT_TOKEN>
 | --- | --- |
 | Name | `itops-kknang-it` (หรือชื่อไซต์จริง) |
 | Connector URL | `https://<hostname>/mcp/it/mcp` |
-| Authentication | **Token** แล้ววาง `IT_TOKEN` (ChatGPT จะใส่เป็น `Authorization: Bearer …`) |
+| Authentication | **OAuth** (อย่าเลือก Token) |
 
 ใช้ **Streamable HTTP** ที่ลงท้าย `/mcp` ไม่ใช่ `/sse`
 
-ถ้า UI ไม่มี Token มีแต่ OAuth: ChatGPT เวอร์ชันนั้นยังต่อสแตกนี้ไม่ได้โดยตรง (สแตกส่ง Bearer คงที่ ยังไม่มี OAuth 2.1) — ให้ทีมลอง **Grok desktop / Cursor** แทน อย่าเปิด admin เพื่อเลี่ยงปัญหา auth
+ครั้งแรก ChatGPT จะเปิดเบราว์เซอร์ไปที่ `https://<hostname>/authorize` — วาง **IT_TOKEN** แล้วกดอนุญาต เหมือนตอนเชื่อม `ai-collaboration-mcp`
+
+ถ้าเลือก Token ใน ChatGPT แล้วยังไม่มีช่องวางเฮดเดอร์: สลับเป็น OAuth แล้วใช้หน้าเว็บของเรา
 
 หลังต่อแล้วลองถาม:
 
@@ -82,7 +93,7 @@ Authorization: Bearer <IT_TOKEN>
 1. ไปที่ [grok.com/connectors](https://grok.com/connectors)
 2. **New Connector** → **Custom**
 3. URL: `https://<hostname>/mcp/it/mcp`
-4. Auth: Bearer / Token = `IT_TOKEN` ถ้ามีช่องให้ใส่
+4. Auth: **OAuth** — จะเปิดหน้า `/authorize` ให้วาง `IT_TOKEN`
 5. เซิร์ฟเวอร์ต้องเข้าถึงจากอินเทอร์เน็ตได้ (tunnel)
 
 องค์กร Grok Business/Enterprise อาจต้องให้แอดมินโปรวิชันคอนเนคเตอร์ก่อนสมาชิกใช้

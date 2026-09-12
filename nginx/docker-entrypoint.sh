@@ -11,7 +11,17 @@ if [ "$IT_TOKEN" = "$ADMIN_TOKEN" ]; then
   exit 1
 fi
 
-envsubst '${IT_TOKEN} ${ADMIN_TOKEN}' \
+if [ -z "${PUBLIC_MCP_ORIGIN:-}" ]; then
+  if [ -n "${PUBLIC_MCP_HOSTNAME:-}" ]; then
+    PUBLIC_MCP_ORIGIN="https://${PUBLIC_MCP_HOSTNAME}"
+  else
+    PUBLIC_MCP_ORIGIN="http://127.0.0.1:9080"
+  fi
+fi
+PUBLIC_MCP_ORIGIN=${PUBLIC_MCP_ORIGIN%/}
+export PUBLIC_MCP_ORIGIN
+
+envsubst '${IT_TOKEN} ${ADMIN_TOKEN} ${PUBLIC_MCP_ORIGIN}' \
   < /etc/nginx/nginx.conf.template \
   > /etc/nginx/nginx.conf
 
