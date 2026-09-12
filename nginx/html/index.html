@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IT Operations Hub — MCP Gateway</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1220;
+        --panel: #121a2b;
+        --line: #243049;
+        --text: #e8eefc;
+        --muted: #9aabcc;
+        --ok: #3dd68c;
+        --bad: #ff6b6b;
+        --accent: #7aa2ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Noto Sans Thai", system-ui, sans-serif;
+        background:
+          radial-gradient(1200px 500px at 10% -10%, #1a2c55 0%, transparent 55%),
+          var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+      }
+      main { max-width: 920px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1 { font-size: 1.7rem; margin: 0 0 8px; }
+      h2 { font-size: 1.05rem; margin: 28px 0 10px; }
+      p, li { color: var(--muted); }
+      code, .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.88em;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin: 12px 0;
+      }
+      .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 0.9rem;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+      .dot.ok { background: var(--ok); }
+      .dot.bad { background: var(--bad); }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { color: var(--text); font-weight: 600; }
+      a { color: var(--accent); }
+      .warn { color: #ffd166; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>IT Operations Hub</h1>
+      <p>
+        เกตเวย์ MCP กลางสำหรับ Zabbix 7 และ MeshCentral — รับ SSE/HTTP จากเอเจนต์ AI
+        หลัง Cloudflare Tunnel และ Nginx RBAC
+      </p>
+      <div class="panel row">
+        <span class="pill"><span id="gw-dot" class="dot"></span> <span id="gw-label">กำลังตรวจเกตเวย์…</span></span>
+        <span class="pill mono" id="host-label"></span>
+      </div>
+
+      <h2>MCP endpoints</h2>
+      <div class="panel">
+        <table>
+          <thead>
+            <tr><th>Path</th><th>Role</th><th>Tools</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">/mcp/it/sse</td>
+              <td><code>it</code> และ <code>admin</code></td>
+              <td>Zabbix read + MeshCentral inventory</td>
+            </tr>
+            <tr>
+              <td class="mono">/mcp/admin/sse</td>
+              <td><code>admin</code> เท่านั้น</td>
+              <td>ชุดเดียวกัน + <code>meshcentral_run_shell</code></td>
+            </tr>
+            <tr>
+              <td class="mono">/mcp/it/mcp</td>
+              <td colspan="2">Streamable HTTP (transport ใหม่ของ MCP)</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>ใส่เฮดเดอร์ <code>Authorization: Bearer &lt;IT_TOKEN|ADMIN_TOKEN&gt;</code> ทุกคำขอ</p>
+      </div>
+
+      <h2>LAN services</h2>
+      <div class="panel">
+        <p>
+          Zabbix UI และ MeshCentral ไม่เปิดออกอินเทอร์เน็ตผ่านเกตเวย์นี้ — ใช้พอร์ต LAN/VPN
+          ที่กำหนดใน <code>.env</code> แล้วล็อกอินที่แอปเอง
+        </p>
+        <ul>
+          <li>Zabbix web: พอร์ต <code>ZABBIX_WEB_LAN_PORT</code> (ค่าเริ่ม 9443)</li>
+          <li>MeshCentral: พอร์ต <code>MESHCENTRAL_HTTPS_PORT</code> / เอเจนต์ <code>MESHCENTRAL_AGENT_PORT</code></li>
+        </ul>
+      </div>
+
+      <p class="warn">อย่าใส่โทเคนลงหน้านี้ และอย่าเปิด <code>/mcp/admin</code> ให้บัญชี IT</p>
+    </main>
+    <script>
+      const host = location.host;
+      document.getElementById("host-label").textContent = host;
+      fetch("/healthz", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((body) => {
+          const ok = body && body.ok;
+          document.getElementById("gw-dot").className = "dot " + (ok ? "ok" : "bad");
+          document.getElementById("gw-label").textContent = ok ? "Nginx gateway พร้อม" : "Gateway ไม่พร้อม";
+        })
+        .catch(() => {
+          document.getElementById("gw-dot").className = "dot bad";
+          document.getElementById("gw-label").textContent = "เรียก /healthz ไม่สำเร็จ";
+        });
+    </script>
+  </body>
+</html>

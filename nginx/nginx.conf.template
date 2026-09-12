@@ -1,0 +1,121 @@
+# nginx.conf.template — envsubst replaces ${IT_TOKEN} and ${ADMIN_TOKEN} only.
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /tmp/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    server_tokens off;
+    charset       utf-8;
+
+    log_format main '$remote_addr $mcp_role $request $status $body_bytes_sent rt=$request_time';
+    access_log /var/log/nginx/access.log main;
+    underscores_in_headers on;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      '';
+    }
+
+    # Exact match of `Authorization: Bearer <token>` to an MCP role.
+    map $http_authorization $mcp_role {
+        default                 "";
+        "Bearer ${IT_TOKEN}"    "it";
+        "Bearer ${ADMIN_TOKEN}" "admin";
+    }
+
+    upstream mcp_hub_it {
+        server mcp-hub-it:3000;
+        keepalive 16;
+    }
+
+    upstream mcp_hub_admin {
+        server mcp-hub-admin:3000;
+        keepalive 16;
+    }
+
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+
+        root /usr/share/nginx/html;
+        index index.html;
+
+        client_max_body_size 8m;
+        client_body_timeout 60s;
+
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
+        add_header X-Frame-Options DENY always;
+
+        location = /healthz {
+            default_type application/json;
+            add_header Cache-Control "no-store";
+            return 200 '{"ok":true,"service":"itops-nginx-gateway"}';
+        }
+
+        location = /mcp/it {
+            return 308 /mcp/it/;
+        }
+
+        location = /mcp/admin {
+            return 308 /mcp/admin/;
+        }
+
+        location /mcp/it/ {
+            auth_request /_auth_it;
+            error_page 401 = @error401;
+            error_page 403 = @error403;
+
+            proxy_pass http://mcp_hub_it/;
+            include /etc/nginx/mcp_proxy.conf;
+        }
+
+        location /mcp/admin/ {
+            auth_request /_auth_admin;
+            error_page 401 = @error401;
+            error_page 403 = @error403;
+
+            proxy_pass http://mcp_hub_admin/;
+            include /etc/nginx/mcp_proxy.conf;
+        }
+
+        # Internal RBAC helpers — keep `if` out of proxy locations.
+        location = /_auth_it {
+            internal;
+            if ($mcp_role = "") { return 401; }
+            if ($mcp_role = "it") { return 200; }
+            if ($mcp_role = "admin") { return 200; }
+            return 403;
+        }
+
+        location = /_auth_admin {
+            internal;
+            if ($mcp_role = "") { return 401; }
+            if ($mcp_role = "admin") { return 200; }
+            return 403;
+        }
+
+        location @error401 {
+            default_type application/json;
+            add_header WWW-Authenticate 'Bearer realm="itops-mcp"' always;
+            return 401 '{"error":"unauthorized","message":"Missing or invalid Authorization Bearer token"}';
+        }
+
+        location @error403 {
+            default_type application/json;
+            return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}

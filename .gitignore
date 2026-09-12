@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+coverage/
+meshcentral-data/
+meshcentral-files/
+meshcentral-backup/
+.zabbix-data/
+*.tsbuildinfo

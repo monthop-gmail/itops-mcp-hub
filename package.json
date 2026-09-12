@@ -1,0 +1,19 @@
+{
+  "name": "itops-mcp-hub",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Centralized IT Operations Hub with MCP gateway, Zabbix, and MeshCentral",
+  "workspaces": [
+    "packages/mcp-common",
+    "packages/mcp-zabbix",
+    "packages/mcp-meshcentral",
+    "packages/mcp-hub"
+  ],
+  "scripts": {
+    "build": "npm run build -w @itops/mcp-common && npm run build -w @itops/mcp-zabbix && npm run build -w @itops/mcp-meshcentral && npm run build -w @itops/mcp-hub",
+    "typecheck": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,230 @@
+name: itops-hub
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2025.8.1
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      nginx:
+        condition: service_healthy
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+
+  nginx:
+    build:
+      context: ./nginx
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      mcp-hub-it:
+        condition: service_healthy
+      mcp-hub-admin:
+        condition: service_healthy
+    environment:
+      IT_TOKEN: ${IT_TOKEN}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+    ports:
+      - "${MCP_LAN_PORT:-9080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  mcp-hub-it:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-hub
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      sub-mcp-zabbix:
+        condition: service_healthy
+      sub-mcp-meshcentral:
+        condition: service_healthy
+    environment:
+      HUB_ROLE: it
+      PORT: "3000"
+      MCP_PUBLIC_BASE_PATH: /mcp/it
+      ZABBIX_MCP_URL: http://sub-mcp-zabbix:3000
+      MESHCENTRAL_MCP_URL: http://sub-mcp-meshcentral:3000
+    expose:
+      - "3000"
+
+  mcp-hub-admin:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-hub
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      sub-mcp-zabbix:
+        condition: service_healthy
+      sub-mcp-meshcentral:
+        condition: service_healthy
+    environment:
+      HUB_ROLE: admin
+      PORT: "3000"
+      MCP_PUBLIC_BASE_PATH: /mcp/admin
+      ZABBIX_MCP_URL: http://sub-mcp-zabbix:3000
+      MESHCENTRAL_MCP_URL: http://sub-mcp-meshcentral:3000
+    expose:
+      - "3000"
+
+  sub-mcp-zabbix:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-zabbix
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      zabbix-web:
+        condition: service_started
+    environment:
+      PORT: "3000"
+      ZABBIX_API_URL: ${ZABBIX_API_URL:-http://zabbix-web:8080/api_jsonrpc.php}
+      ZABBIX_API_TOKEN: ${ZABBIX_API_TOKEN}
+    expose:
+      - "3000"
+
+  sub-mcp-meshcentral:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-meshcentral
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      meshcentral:
+        condition: service_started
+    environment:
+      PORT: "3000"
+      MESHCENTRAL_ALLOW_SHELL: "true"
+      MESHCENTRAL_URL: ${MESHCENTRAL_URL:-https://meshcentral:443}
+      MESHCENTRAL_USER: ${MESHCENTRAL_USER:-admin}
+      MESHCENTRAL_PASSWORD: ${MESHCENTRAL_PASSWORD}
+      MESHCENTRAL_API_KEY: ${MESHCENTRAL_API_KEY}
+      MESHCENTRAL_2FA_TOKEN: ${MESHCENTRAL_2FA_TOKEN:-}
+      MESHCENTRAL_TLS_INSECURE: ${MESHCENTRAL_TLS_INSECURE:-true}
+    expose:
+      - "3000"
+
+  zabbix-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    environment:
+      TZ: ${TZ:-Asia/Bangkok}
+      POSTGRES_USER: ${ZABBIX_DB_USER:-zabbix}
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+      POSTGRES_DB: ${ZABBIX_DB_NAME:-zabbix}
+    volumes:
+      - zabbix-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ZABBIX_DB_USER:-zabbix} -d ${ZABBIX_DB_NAME:-zabbix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-7.0-latest
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      zabbix-db:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Asia/Bangkok}
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_USER: ${ZABBIX_DB_USER:-zabbix}
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+      POSTGRES_DB: ${ZABBIX_DB_NAME:-zabbix}
+    ports:
+      - "${ZABBIX_SERVER_LAN_PORT:-10051}:10051"
+    volumes:
+      - zabbix-server-data:/var/lib/zabbix
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      zabbix-db:
+        condition: service_healthy
+      zabbix-server:
+        condition: service_started
+    environment:
+      TZ: ${TZ:-Asia/Bangkok}
+      PHP_TZ: ${TZ:-Asia/Bangkok}
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_SERVER_NAME: IT Operations Hub
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_USER: ${ZABBIX_DB_USER:-zabbix}
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD}
+      POSTGRES_DB: ${ZABBIX_DB_NAME:-zabbix}
+    ports:
+      - "${ZABBIX_WEB_LAN_PORT:-9443}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/ping"]
+      interval: 20s
+      timeout: 8s
+      retries: 20
+      start_period: 120s
+
+  meshcentral:
+    image: typhonragewind/meshcentral:latest
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    environment:
+      TZ: ${TZ:-Asia/Bangkok}
+      NODE_ENV: production
+      HOSTNAME: ${MESHCENTRAL_HOSTNAME:-mesh.example.com}
+      ALLOW_NEW_ACCOUNTS: ${MESHCENTRAL_ALLOW_NEW_ACCOUNTS:-true}
+      IFRAME: "false"
+      REVERSE_PROXY: "false"
+      WEBRTC: "true"
+    volumes:
+      - meshcentral-data:/opt/meshcentral/meshcentral-data
+      - meshcentral-files:/opt/meshcentral/meshcentral-files
+    ports:
+      - "${MESHCENTRAL_HTTPS_PORT:-9444}:443"
+      - "${MESHCENTRAL_AGENT_PORT:-4433}:4433"
+
+networks:
+  infra-net:
+    name: infra-net
+    driver: bridge
+
+volumes:
+  zabbix-db-data:
+  zabbix-server-data:
+  meshcentral-data:
+  meshcentral-files:
