@@ -65,7 +65,7 @@
     <main>
       <h1>IT Operations Hub</h1>
       <p>
-        เกตเวย์ MCP กลางสำหรับ Zabbix 7 และ MeshCentral — รับ SSE/HTTP จากเอเจนต์ AI
+        เกตเวย์ MCP กลางสำหรับ Zabbix 7, MeshCentral และ Express Accounting — รับ SSE/HTTP จากเอเจนต์ AI
         หลัง Cloudflare Tunnel และ Nginx RBAC
       </p>
       <div class="panel row">
@@ -91,6 +91,11 @@
               <td>ชุดเดียวกัน + <code>meshcentral_run_shell</code></td>
             </tr>
             <tr>
+              <td class="mono">/mcp/accounting/mcp</td>
+              <td><code>accounting</code> เท่านั้น</td>
+              <td>Express Accounting อ่านอย่างเดียว</td>
+            </tr>
+            <tr>
               <td class="mono">/mcp/it/mcp</td>
               <td colspan="2">Streamable HTTP (transport ใหม่ของ MCP)</td>
             </tr>
@@ -98,9 +103,10 @@
         </table>
         <p>
           ChatGPT / Grok / Gemini: เปิด <a href="/oauth/setup">/oauth/setup</a> เพื่อคัดลอก Client ID
-          แล้วเชื่อม URL <code>/mcp/it/mcp</code> แบบ OAuth — ครั้งแรกจะเปิดหน้าให้วาง <code>IT_TOKEN</code>
+          แล้วเชื่อม URL <code>/mcp/it/mcp</code> (งาน IT) หรือ <code>/mcp/accounting/mcp</code> (สมุด Express)
+          แบบ OAuth — ครั้งแรกจะเปิดหน้าให้วางโทเคนของบทบาทนั้น
         </p>
-        <p>ไคลเอนต์ที่ใส่เฮดเดอร์เองใช้ <code>Authorization: Bearer &lt;IT_TOKEN|ADMIN_TOKEN&gt;</code> ได้เช่นกัน</p>
+        <p>ไคลเอนต์ที่ใส่เฮดเดอร์เองใช้ <code>Authorization: Bearer &lt;IT_TOKEN|ADMIN_TOKEN|ACCOUNTING_TOKEN&gt;</code> ได้เช่นกัน</p>
       </div>
 
       <h2>LAN services</h2>
@@ -115,7 +121,7 @@
         </ul>
       </div>
 
-      <p class="warn">อย่าใส่โทเคนลงหน้านี้ และอย่าเปิด <code>/mcp/admin</code> ให้บัญชี IT</p>
+      <p class="warn">อย่าใส่โทเคนลงหน้านี้ — โทเคน IT/admin ห้ามใช้กับสมุดบัญชี และโทเคนบัญชีห้ามใช้กับเส้น IT</p>
     </main>
     <script>
       const host = location.host;

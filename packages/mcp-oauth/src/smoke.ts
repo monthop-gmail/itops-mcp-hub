@@ -3,6 +3,7 @@ import { createOauthApp } from "./app.js";
 
 const IT = "it-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const ADMIN = "admin-token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const ACCOUNTING = "acct-token-cccccccccccccccccccccccccccccc";
 const ISSUER = "https://mcp-kknang.example.test";
 
 function b64url(buf: Buffer): string {
@@ -10,7 +11,12 @@ function b64url(buf: Buffer): string {
 }
 
 async function main(): Promise<void> {
-  const app = createOauthApp({ issuer: ISSUER, itToken: IT, adminToken: ADMIN });
+  const app = createOauthApp({
+    issuer: ISSUER,
+    itToken: IT,
+    adminToken: ADMIN,
+    accountingToken: ACCOUNTING,
+  });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const addr = server.address();
@@ -30,6 +36,15 @@ async function main(): Promise<void> {
   )) as { resource: string };
   if (pr.resource !== `${ISSUER}/mcp/it/mcp`) {
     throw new Error(`protected resource mismatch: ${pr.resource}`);
+  }
+  const prAcct = (await fetch(
+    `${base}/.well-known/oauth-protected-resource/mcp/accounting/mcp`,
+  ).then((r) => r.json())) as { resource: string; scopes_supported?: string[] };
+  if (
+    prAcct.resource !== `${ISSUER}/mcp/accounting/mcp` ||
+    !prAcct.scopes_supported?.includes("mcp:accounting")
+  ) {
+    throw new Error(`accounting protected resource mismatch: ${JSON.stringify(prAcct)}`);
   }
 
   const registered = await fetch(`${base}/register`, {
@@ -132,8 +147,8 @@ async function main(): Promise<void> {
   }
   const setup = await fetch(`${base}/oauth/setup`);
   const setupHtml = await setup.text();
-  if (setup.status !== 200 || !setupHtml.includes("itops-public")) {
-    throw new Error("setup page missing public client id");
+  if (setup.status !== 200 || !setupHtml.includes("itops-public") || !setupHtml.includes("/mcp/accounting/mcp")) {
+    throw new Error("setup page missing public client id or accounting URL");
   }
 
   const grokGrant = await fetch(`${base}/authorize`, {
@@ -169,6 +184,97 @@ async function main(): Promise<void> {
   const grokBody = (await grokToken.json()) as { access_token?: string };
   if (grokToken.status !== 200 || grokBody.access_token !== IT) {
     throw new Error(`grok token ${grokToken.status} ${JSON.stringify(grokBody)}`);
+  }
+
+  const itOnAccounting = await fetch(`${base}/authorize`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: client.client_id,
+      redirect_uri: "https://chatgpt.com/connector_platform_oauth_redirect",
+      state: "st-acct-it",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      resource: `${ISSUER}/mcp/accounting/mcp`,
+      scope: "mcp:accounting",
+      response_type: "code",
+      token: IT,
+    }),
+  });
+  const itOnAccountingHtml = await itOnAccounting.text();
+  if (!itOnAccountingHtml.includes("ACCOUNTING_TOKEN")) {
+    throw new Error("IT token should be rejected on accounting resource");
+  }
+
+  const accountingOnIt = await fetch(`${base}/authorize`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: client.client_id,
+      redirect_uri: "https://chatgpt.com/connector_platform_oauth_redirect",
+      state: "st-acct-wrong",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      resource: `${ISSUER}/mcp/it/mcp`,
+      scope: "mcp:it",
+      response_type: "code",
+      token: ACCOUNTING,
+    }),
+  });
+  const accountingOnItHtml = await accountingOnIt.text();
+  if (!accountingOnItHtml.includes("/mcp/accounting")) {
+    throw new Error("accounting token should be rejected on IT resource");
+  }
+
+  const acctPageUrl = new URL("/authorize", base);
+  acctPageUrl.searchParams.set("response_type", "code");
+  acctPageUrl.searchParams.set("client_id", client.client_id);
+  acctPageUrl.searchParams.set("redirect_uri", "https://chatgpt.com/connector_platform_oauth_redirect");
+  acctPageUrl.searchParams.set("code_challenge", challenge);
+  acctPageUrl.searchParams.set("code_challenge_method", "S256");
+  acctPageUrl.searchParams.set("state", "acct-1");
+  acctPageUrl.searchParams.set("resource", `${ISSUER}/mcp/accounting/mcp`);
+  const acctPage = await fetch(acctPageUrl);
+  const acctHtml = await acctPage.text();
+  if (acctPage.status !== 200 || !acctHtml.includes("ACCOUNTING_TOKEN")) {
+    throw new Error(`accounting authorize page failed: ${acctPage.status}`);
+  }
+
+  const acctGranted = await fetch(`${base}/authorize`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: client.client_id,
+      redirect_uri: "https://chatgpt.com/connector_platform_oauth_redirect",
+      state: "acct-1",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      resource: `${ISSUER}/mcp/accounting/mcp`,
+      scope: "mcp:accounting",
+      response_type: "code",
+      token: ACCOUNTING,
+    }),
+    redirect: "manual",
+  });
+  const acctLocation = acctGranted.headers.get("location") || "";
+  if (acctGranted.status !== 302 || !acctLocation.includes("code=")) {
+    throw new Error(`accounting authorize ${acctGranted.status} ${acctLocation}`);
+  }
+  const acctCode = new URL(acctLocation).searchParams.get("code");
+  const acctToken = await fetch(`${base}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: client.client_id,
+      code: acctCode || "",
+      redirect_uri: "https://chatgpt.com/connector_platform_oauth_redirect",
+      code_verifier: verifier,
+    }),
+  });
+  const acctBody = (await acctToken.json()) as { access_token?: string; scope?: string };
+  if (acctToken.status !== 200 || acctBody.access_token !== ACCOUNTING || acctBody.scope !== "mcp:accounting") {
+    throw new Error(`accounting token ${acctToken.status} ${JSON.stringify(acctBody)}`);
   }
 
   server.close();

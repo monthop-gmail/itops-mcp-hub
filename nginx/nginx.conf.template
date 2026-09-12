@@ -1,4 +1,4 @@
-# nginx.conf.template — envsubst replaces ${IT_TOKEN}, ${ADMIN_TOKEN}, ${PUBLIC_MCP_ORIGIN}.
+# nginx.conf.template — envsubst replaces ${IT_TOKEN}, ${ADMIN_TOKEN}, ${ACCOUNTING_TOKEN}, ${PUBLIC_MCP_ORIGIN}.
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
 pid /tmp/nginx.pid;
@@ -27,9 +27,10 @@ http {
 
     # Exact match of `Authorization: Bearer <token>` to an MCP role.
     map $http_authorization $mcp_role {
-        default                 "";
-        "Bearer ${IT_TOKEN}"    "it";
-        "Bearer ${ADMIN_TOKEN}" "admin";
+        default                      "";
+        "Bearer ${IT_TOKEN}"         "it";
+        "Bearer ${ADMIN_TOKEN}"      "admin";
+        "Bearer ${ACCOUNTING_TOKEN}" "accounting";
     }
 
     # Re-resolve Compose service names so recreate does not pin stale IPs.
@@ -104,6 +105,10 @@ http {
             return 308 /mcp/admin/;
         }
 
+        location = /mcp/accounting {
+            return 308 /mcp/accounting/;
+        }
+
         location /mcp/it/ {
             if ($request_method = OPTIONS) {
                 add_header Access-Control-Allow-Origin * always;
@@ -144,6 +149,26 @@ http {
             include /etc/nginx/mcp_proxy.conf;
         }
 
+        location /mcp/accounting/ {
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin * always;
+                add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type, MCP-Protocol-Version, mcp-session-id, Last-Event-ID" always;
+                add_header Access-Control-Max-Age 86400 always;
+                add_header Access-Control-Expose-Headers "WWW-Authenticate, mcp-session-id" always;
+                return 204;
+            }
+
+            auth_request /_auth_accounting;
+            error_page 401 = @error401_accounting;
+            error_page 403 = @error403;
+
+            set $mcp_accounting_upstream mcp-hub-accounting:3000;
+            rewrite ^/mcp/accounting/(.*)$ /$1 break;
+            proxy_pass http://$mcp_accounting_upstream;
+            include /etc/nginx/mcp_proxy.conf;
+        }
+
         # Internal RBAC helpers — keep `if` out of proxy locations except OPTIONS.
         location = /_auth_it {
             internal;
@@ -157,6 +182,13 @@ http {
             internal;
             if ($mcp_role = "") { return 401; }
             if ($mcp_role = "admin") { return 200; }
+            return 403;
+        }
+
+        location = /_auth_accounting {
+            internal;
+            if ($mcp_role = "") { return 401; }
+            if ($mcp_role = "accounting") { return 200; }
             return 403;
         }
 
@@ -176,10 +208,18 @@ http {
             return 401 '{"error":"unauthorized","message":"Missing or invalid Authorization Bearer token"}';
         }
 
+        location @error401_accounting {
+            default_type application/json;
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Expose-Headers "WWW-Authenticate, mcp-session-id" always;
+            add_header WWW-Authenticate 'Bearer realm="itops-mcp", resource_metadata="${PUBLIC_MCP_ORIGIN}/.well-known/oauth-protected-resource/mcp/accounting/mcp", scope="mcp:accounting"' always;
+            return 401 '{"error":"unauthorized","message":"Missing or invalid Authorization Bearer token"}';
+        }
+
         location @error403 {
             default_type application/json;
             add_header Access-Control-Allow-Origin * always;
-            return 403 '{"error":"forbidden","message":"IT role cannot access /mcp/admin/"}';
+            return 403 '{"error":"forbidden","message":"This token cannot access this MCP path"}';
         }
 
         location / {

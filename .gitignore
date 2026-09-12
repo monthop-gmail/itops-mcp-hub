@@ -9,6 +9,8 @@ meshcentral-data/
 meshcentral-files/
 meshcentral-backup/
 .zabbix-data/
-*.tsbuildinfo
+data/express/*.DBF
+data/express/*.dbf
+!data/express/README.md
 agent-tools/
 terminals/

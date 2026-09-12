@@ -2,16 +2,18 @@
   "name": "itops-mcp-hub",
   "private": true,
   "version": "1.0.0",
-  "description": "Centralized IT Operations Hub with MCP gateway, Zabbix, and MeshCentral",
+  "description": "Centralized IT Operations Hub with MCP gateway, Zabbix, MeshCentral, and Express Accounting",
   "workspaces": [
     "packages/mcp-common",
     "packages/mcp-zabbix",
     "packages/mcp-meshcentral",
+    "packages/mcp-express",
     "packages/mcp-hub",
     "packages/mcp-oauth"
   ],
   "scripts": {
-    "build": "npm run build -w @itops/mcp-common && npm run build -w @itops/mcp-zabbix && npm run build -w @itops/mcp-meshcentral && npm run build -w @itops/mcp-hub && npm run build -w @itops/mcp-oauth",
+    "build": "npm run build -w @itops/mcp-common && npm run build -w @itops/mcp-zabbix && npm run build -w @itops/mcp-meshcentral && npm run build -w @itops/mcp-express && npm run build -w @itops/mcp-hub && npm run build -w @itops/mcp-oauth",
+    "smoke": "npm run smoke -w @itops/mcp-express && npm run smoke -w @itops/mcp-oauth",
     "typecheck": "npm run build"
   },
   "engines": {

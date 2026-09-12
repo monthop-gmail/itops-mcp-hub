@@ -33,6 +33,7 @@ services:
       PORT: "3000"
       IT_TOKEN: ${IT_TOKEN}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
+      ACCOUNTING_TOKEN: ${ACCOUNTING_TOKEN}
       PUBLIC_MCP_ORIGIN: ${PUBLIC_MCP_ORIGIN:-}
       PUBLIC_MCP_HOSTNAME: ${PUBLIC_MCP_HOSTNAME:-}
 
@@ -47,11 +48,14 @@ services:
         condition: service_healthy
       mcp-hub-admin:
         condition: service_healthy
+      mcp-hub-accounting:
+        condition: service_healthy
       mcp-oauth:
         condition: service_healthy
     environment:
       IT_TOKEN: ${IT_TOKEN}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
+      ACCOUNTING_TOKEN: ${ACCOUNTING_TOKEN}
       PUBLIC_MCP_ORIGIN: ${PUBLIC_MCP_ORIGIN:-}
       PUBLIC_MCP_HOSTNAME: ${PUBLIC_MCP_HOSTNAME:-}
     ports:
@@ -109,6 +113,26 @@ services:
     expose:
       - "3000"
 
+  mcp-hub-accounting:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-hub
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    depends_on:
+      sub-mcp-express:
+        condition: service_healthy
+    environment:
+      HUB_ROLE: accounting
+      PORT: "3000"
+      MCP_PUBLIC_BASE_PATH: /mcp/accounting
+      EXPRESS_MCP_URL: http://sub-mcp-express:3000
+    expose:
+      - "3000"
+
   sub-mcp-zabbix:
     build:
       context: .
@@ -149,6 +173,28 @@ services:
       MESHCENTRAL_API_KEY: ${MESHCENTRAL_API_KEY}
       MESHCENTRAL_2FA_TOKEN: ${MESHCENTRAL_2FA_TOKEN:-}
       MESHCENTRAL_TLS_INSECURE: ${MESHCENTRAL_TLS_INSECURE:-true}
+    expose:
+      - "3000"
+
+  sub-mcp-express:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-express
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    environment:
+      PORT: "3000"
+      EXPRESS_BACKEND: ${EXPRESS_BACKEND:-fixture}
+      EXPRESS_API_URL: ${EXPRESS_API_URL:-}
+      EXPRESS_API_TOKEN: ${EXPRESS_API_TOKEN:-}
+      EXPRESS_DATA_DIR: /data/express
+      EXPRESS_DBF_ENCODING: ${EXPRESS_DBF_ENCODING:-windows-874}
+      EXPRESS_COMPANY_NAME: ${EXPRESS_COMPANY_NAME:-Express Accounting}
+    volumes:
+      - ${EXPRESS_HOST_DATA_DIR:-./data/express}:/data/express:ro
     expose:
       - "3000"
 

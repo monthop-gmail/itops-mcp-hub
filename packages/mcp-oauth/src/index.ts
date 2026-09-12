@@ -3,8 +3,9 @@ import { createOauthApp } from "./app.js";
 
 const itToken = requireEnv("IT_TOKEN");
 const adminToken = requireEnv("ADMIN_TOKEN");
-if (itToken === adminToken) {
-  throw new Error("IT_TOKEN and ADMIN_TOKEN must be different");
+const accountingToken = requireEnv("ACCOUNTING_TOKEN");
+if (itToken === adminToken || itToken === accountingToken || adminToken === accountingToken) {
+  throw new Error("IT_TOKEN, ADMIN_TOKEN, and ACCOUNTING_TOKEN must all be different");
 }
 
 const hostname = optionalEnv("PUBLIC_MCP_HOSTNAME");
@@ -17,6 +18,7 @@ const app = createOauthApp({
   issuer,
   itToken,
   adminToken,
+  accountingToken,
   publicClientId: optionalEnv("OAUTH_PUBLIC_CLIENT_ID", "itops-public"),
   publicClientSecret: optionalEnv("OAUTH_PUBLIC_CLIENT_SECRET", "itops-public-secret"),
 });

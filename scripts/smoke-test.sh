@@ -90,7 +90,7 @@ source .env
 set +a
 
 missing_env=()
-for key in IT_TOKEN ADMIN_TOKEN; do
+for key in IT_TOKEN ADMIN_TOKEN ACCOUNTING_TOKEN; do
   if [ -z "${!key:-}" ]; then
     missing_env+=("$key")
   fi
@@ -106,6 +106,7 @@ fi
 BASE_URL="${BASE_URL:-http://127.0.0.1:${MCP_LAN_PORT:-9080}}"
 IT_URL="${BASE_URL%/}/mcp/it"
 ADMIN_URL="${BASE_URL%/}/mcp/admin"
+ACCOUNTING_URL="${BASE_URL%/}/mcp/accounting"
 ALLOW_PUBLIC_IT_FLAG="$(printf '%s' "${ALLOW_PUBLIC_IT:-false}" | tr '[:upper:]' '[:lower:]')"
 ALLOW_PUBLIC_ADMIN_FLAG="$(printf '%s' "${ALLOW_PUBLIC_ADMIN:-false}" | tr '[:upper:]' '[:lower:]')"
 
@@ -154,9 +155,14 @@ echo "== Gateway and RBAC checks =="
 http_check "gateway healthz" "200" "\"ok\":true" "${BASE_URL%/}/healthz"
 http_check "oauth authorization server metadata" "200" "authorization_endpoint" "${BASE_URL%/}/.well-known/oauth-authorization-server"
 http_check "oauth protected resource IT" "200" "\"resource\"" "${BASE_URL%/}/.well-known/oauth-protected-resource/mcp/it/mcp"
+http_check "oauth protected resource accounting" "200" "mcp:accounting" "${BASE_URL%/}/.well-known/oauth-protected-resource/mcp/accounting/mcp"
 http_check "oauth setup page" "200" "itops-public" "${BASE_URL%/}/oauth/setup"
 http_check "IT -> /mcp/it/" "200" "" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/"
 http_check "ADMIN -> /mcp/admin/" "200" "" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/"
+http_check "ACCOUNTING -> /mcp/accounting/" "200" "" -H "Authorization: Bearer $ACCOUNTING_TOKEN" "${ACCOUNTING_URL}/"
+http_check "IT -> /mcp/accounting/ (should be forbidden)" "403" "" -H "Authorization: Bearer $IT_TOKEN" "${ACCOUNTING_URL}/"
+http_check "ACCOUNTING -> /mcp/it/ (should be forbidden)" "403" "" -H "Authorization: Bearer $ACCOUNTING_TOKEN" "${IT_URL}/"
+http_check "no token -> /mcp/accounting/ (should be unauthorized)" "401" "" "${ACCOUNTING_URL}/"
 if is_truthy_flag "$ALLOW_PUBLIC_ADMIN_FLAG"; then
   http_check "IT -> /mcp/admin/ (ALLOW_PUBLIC_ADMIN enabled)" "200" "" -H "Authorization: Bearer $IT_TOKEN" "${ADMIN_URL}/"
   http_check "no token -> /mcp/admin/ (ALLOW_PUBLIC_ADMIN enabled)" "200" "" "${ADMIN_URL}/"
@@ -180,6 +186,14 @@ else
 fi
 http_check "IT healthz" "200" "\"service\":\"mcp-hub-it\"" -H "Authorization: Bearer $IT_TOKEN" "${IT_URL}/healthz"
 http_check "ADMIN healthz" "200" "\"service\":\"mcp-hub-admin\"" -H "Authorization: Bearer $ADMIN_TOKEN" "${ADMIN_URL}/healthz"
+http_check "ACCOUNTING healthz" "200" "\"service\":\"mcp-hub-accounting\"" -H "Authorization: Bearer $ACCOUNTING_TOKEN" "${ACCOUNTING_URL}/healthz"
+ACCT_UNAUTH_HEADERS="$TMP_DIR/acct_mcp_unauth.headers"
+curl -sS -o /dev/null -D "$ACCT_UNAUTH_HEADERS" "${ACCOUNTING_URL}/mcp" || true
+if grep -Fqi "resource_metadata" "$ACCT_UNAUTH_HEADERS" && grep -Fq "mcp/accounting/mcp" "$ACCT_UNAUTH_HEADERS"; then
+  pass "accounting /mcp 401 includes WWW-Authenticate resource_metadata"
+else
+  fail "accounting /mcp 401 missing WWW-Authenticate resource_metadata"
+fi
 
 echo
 echo "== MCP initialize checks =="
@@ -197,6 +211,13 @@ http_check "ADMIN initialize" "200" "\"name\":\"mcp-hub-admin\"" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -X POST "${ADMIN_URL}/mcp" \
+  --data "$INIT_BODY"
+
+http_check "ACCOUNTING initialize" "200" "\"name\":\"mcp-hub-accounting\"" \
+  -H "Authorization: Bearer $ACCOUNTING_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -X POST "${ACCOUNTING_URL}/mcp" \
   --data "$INIT_BODY"
 
 SSE_HEADERS="$TMP_DIR/it_sse.headers"

@@ -10,18 +10,36 @@ const severityMin = z
   .optional()
   .describe("Minimum problem severity. 0 Not classified … 5 Disaster.");
 
-export type HubRole = "it" | "admin";
+const expressQuery = z
+  .string()
+  .min(1)
+  .optional()
+  .describe("ค้นหารหัสหรือชื่อ (ไม่สนตัวพิมพ์)");
 
-export function registerHubTools(
-  server: McpServer,
-  backends: { zabbix: BackendMcpClient; meshcentral: BackendMcpClient },
-  role: HubRole,
-): void {
+const expressLimit = z.number().int().min(1).max(200).optional().describe("จำนวนแถวสูงสุด ค่าเริ่ม 50");
+
+export type HubRole = "it" | "admin" | "accounting";
+
+export interface HubBackends {
+  zabbix?: BackendMcpClient;
+  meshcentral?: BackendMcpClient;
+  express?: BackendMcpClient;
+}
+
+export function registerHubTools(server: McpServer, backends: HubBackends, role: HubRole): void {
+  if (role === "accounting") {
+    registerAccountingTools(server, requireBackend(backends.express, "express"));
+    return;
+  }
+
+  const zabbix = requireBackend(backends.zabbix, "zabbix");
+  const meshcentral = requireBackend(backends.meshcentral, "meshcentral");
+
   server.tool(
     "zabbix_get_active_problems",
     "Read currently active Zabbix problems, optionally filtered by minimum severity (0–5).",
     { severity_min: severityMin },
-    async (args) => backends.zabbix.callTool("zabbix_get_active_problems", args),
+    async (args) => zabbix.callTool("zabbix_get_active_problems", args),
   );
 
   server.tool(
@@ -30,7 +48,7 @@ export function registerHubTools(
     {
       group_name: z.string().min(1).optional().describe("Optional Zabbix host group name."),
     },
-    async (args) => backends.zabbix.callTool("zabbix_get_device_status", args),
+    async (args) => zabbix.callTool("zabbix_get_device_status", args),
   );
 
   server.tool(
@@ -40,14 +58,14 @@ export function registerHubTools(
       host_name: z.string().min(1).describe("Zabbix technical or visible host name."),
       item_keys: z.array(z.string().min(1)).min(1).describe("Exact Zabbix item keys."),
     },
-    async (args) => backends.zabbix.callTool("zabbix_get_metrics", args),
+    async (args) => zabbix.callTool("zabbix_get_metrics", args),
   );
 
   server.tool(
     "meshcentral_get_inventory",
     "Read MeshCentral cached node inventory (id, name, OS, CPU, RAM, IP).",
     {},
-    async () => backends.meshcentral.callTool("meshcentral_get_inventory", {}),
+    async () => meshcentral.callTool("meshcentral_get_inventory", {}),
   );
 
   if (role !== "admin") {
@@ -61,6 +79,61 @@ export function registerHubTools(
       node_id: z.string().min(1).describe("MeshCentral node id or exact device name."),
       command: z.string().min(1).describe("Command to execute on the agent."),
     },
-    async (args) => backends.meshcentral.callTool("meshcentral_run_shell", args),
+    async (args) => meshcentral.callTool("meshcentral_run_shell", args),
+  );
+}
+
+function requireBackend(client: BackendMcpClient | undefined, name: string): BackendMcpClient {
+  if (!client) {
+    throw new Error(`MCP hub backend '${name}' is not configured`);
+  }
+  return client;
+}
+
+function registerAccountingTools(server: McpServer, express: BackendMcpClient): void {
+  server.tool(
+    "express_get_status",
+    "สถานะการต่อ Express Accounting (express.co.th): โหมด fixture / http / dbf และชื่อกิจการ",
+    {},
+    async () => express.callTool("express_get_status", {}),
+  );
+
+  server.tool(
+    "express_list_customers",
+    "รายชื่อลูกหนี้จากแฟ้ม ARMAS (หรือ HTTP /customers)",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => express.callTool("express_list_customers", args),
+  );
+
+  server.tool(
+    "express_list_vendors",
+    "รายชื่อเจ้าหนี้จากแฟ้ม APMAS (หรือ HTTP /vendors)",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => express.callTool("express_list_vendors", args),
+  );
+
+  server.tool(
+    "express_list_items",
+    "รายการสินค้าจากแฟ้ม STMAS (หรือ HTTP /items)",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => express.callTool("express_list_items", args),
+  );
+
+  server.tool(
+    "express_list_ar_invoices",
+    "ใบแจ้งหนี้ลูกหนี้ (เปิดค้างหรือทั้งหมด). โหมด dbf ยังไม่มีตารางรายการขายจนกว่าจะต่อ HTTP adapter",
+    {
+      status: z.enum(["open", "paid", "void", "all"]).optional().describe("ค่าเริ่ม open"),
+      query: expressQuery,
+      limit: expressLimit,
+    },
+    async (args) => express.callTool("express_list_ar_invoices", args),
+  );
+
+  server.tool(
+    "express_list_gl_accounts",
+    "ผังบัญชี / ยอด GL จากแฟ้ม GLMAS (หรือ HTTP /gl-accounts)",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => express.callTool("express_list_gl_accounts", args),
   );
 }
