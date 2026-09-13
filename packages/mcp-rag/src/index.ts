@@ -21,7 +21,7 @@ function createCorpus(): RagCorpus {
       dataDir,
       indexPath,
       false,
-      `อินเด็กซ์โฟลเดอร์ ${dataDir} ตาม path จริง — ไม่ต้องตัดโครงสร้างก่อน. PDF ใช้ pdftotext`,
+      `อินเด็กซ์โฟลเดอร์ ${dataDir} ตาม path จริง — FTS5 trigram (better-sqlite3). PDF ใช้ pdftotext`,
     );
   }
   const dataDir = writeFixtureCorpus();
