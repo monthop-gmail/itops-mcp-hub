@@ -44,18 +44,20 @@ log("info", "starting RAG MCP server", {
   backend: optionalEnv("RAG_BACKEND", "fixture"),
 });
 
-const indexing = corpus.reindex().then((status) => {
-  log("info", "RAG index ready", { ...status });
-});
-indexing.catch((error) => {
-  log("error", "RAG index failed", {
-    err: error instanceof Error ? error.message : String(error),
-  });
-});
-
 serveMcpHttp(createServer, {
   name: NAME,
   version: VERSION,
   port,
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),
 });
+
+void corpus
+  .reindex()
+  .then((status) => {
+    log("info", "RAG index ready", { ...status });
+  })
+  .catch((error) => {
+    log("error", "RAG index failed", {
+      err: error instanceof Error ? error.message : String(error),
+    });
+  });

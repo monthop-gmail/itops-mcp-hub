@@ -230,9 +230,9 @@ services:
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
       interval: 15s
-      timeout: 5s
+      timeout: 10s
       retries: 8
-      start_period: 40s
+      start_period: 90s
 
   zabbix-db:
     image: postgres:16-alpine

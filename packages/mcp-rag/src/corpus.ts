@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { log } from "@itops/mcp-common";
 import { chunkText, titleFromPath } from "./chunk.js";
 import { extractFile, supportedExt } from "./extract.js";
 import { excerptAround, indexTokens, queryTokens } from "./ngram.js";
@@ -80,17 +81,25 @@ export class RagCorpus {
     try {
       this.db!.exec("DELETE FROM ngrams; DELETE FROM chunks;");
       const files = walkFiles(this.dataDir);
+      log("info", "RAG indexing start", {
+        backend: this.backend,
+        files: files.length,
+        dataDir: this.dataDir,
+      });
       const insertChunk = this.db!.prepare(
         "INSERT INTO chunks(path, title, page, text) VALUES (?, ?, ?, ?)",
       );
       const insertGram = this.db!.prepare("INSERT INTO ngrams(gram, chunk_id) VALUES (?, ?)");
       this.db!.exec("BEGIN");
+      let fileIndex = 0;
+      let gramWrites = 0;
       for (const file of files) {
+        fileIndex += 1;
         if (supportedExt(file.absPath) === "skip") {
           this.skipped += 1;
           continue;
         }
-        const extracted = extractFile(file.absPath);
+        const extracted = await extractFile(file.absPath);
         if (!extracted.ok) {
           this.skipped += 1;
           continue;
@@ -101,8 +110,18 @@ export class RagCorpus {
           const chunkId = Number(result.lastInsertRowid);
           for (const gram of indexTokens(piece.text)) {
             insertGram.run(gram, chunkId);
+            gramWrites += 1;
+            if (gramWrites % 4000 === 0) {
+              await yieldEventLoop();
+            }
           }
         }
+        log("info", "RAG indexed file", {
+          path: file.relPath,
+          fileIndex,
+          total: files.length,
+        });
+        await yieldEventLoop();
       }
       this.db!.exec("COMMIT");
       this.db!.prepare("INSERT OR REPLACE INTO meta(k, v) VALUES ('indexed_at', ?)").run(
@@ -203,4 +222,10 @@ export class RagCorpus {
 function extOf(path: string): string {
   const idx = path.lastIndexOf(".");
   return idx >= 0 ? path.slice(idx).toLowerCase() : "";
+}
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
 }
