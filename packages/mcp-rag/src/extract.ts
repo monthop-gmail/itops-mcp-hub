@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 
@@ -20,7 +20,7 @@ export function supportedExt(path: string): "text" | "pdf" | "skip" {
   return "skip";
 }
 
-export function extractFile(path: string): ExtractResult {
+export async function extractFile(path: string): Promise<ExtractResult> {
   const kind = supportedExt(path);
   if (kind === "skip") {
     return { ok: false, reason: `unsupported ${extname(path) || "extension"}` };
@@ -37,19 +37,43 @@ export function extractFile(path: string): ExtractResult {
   }
 }
 
-function extractPdf(path: string): ExtractResult {
-  const result = spawnSync("pdftotext", ["-layout", "-enc", "UTF-8", path, "-"], {
-    encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
-    timeout: 60_000,
+function extractPdf(path: string): Promise<ExtractResult> {
+  return new Promise((resolve) => {
+    const child = spawn("pdftotext", ["-layout", "-enc", "UTF-8", path, "-"], {
+      timeout: 180_000,
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let settled = false;
+    const finish = (result: ExtractResult) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
+    };
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout.push(chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr.push(chunk);
+    });
+    child.on("error", (error) => {
+      finish({ ok: false, reason: `pdftotext missing or failed: ${error.message}` });
+    });
+    child.on("close", (status) => {
+      if (status !== 0) {
+        const detail = Buffer.concat(stderr).toString("utf8").slice(0, 300);
+        finish({ ok: false, reason: detail || `pdftotext exit ${status}` });
+        return;
+      }
+      finish({
+        ok: true,
+        text: Buffer.concat(stdout).toString("utf8"),
+        extractor: "pdftotext",
+      });
+    });
   });
-  if (result.error) {
-    return { ok: false, reason: `pdftotext missing or failed: ${result.error.message}` };
-  }
-  if (result.status !== 0) {
-    return { ok: false, reason: result.stderr?.slice(0, 300) || `pdftotext exit ${result.status}` };
-  }
-  return { ok: true, text: result.stdout ?? "", extractor: "pdftotext" };
 }
 
 function decodeDocument(buf: Buffer): string {
