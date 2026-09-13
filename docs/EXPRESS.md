@@ -63,15 +63,15 @@ EXPRESS_DBF_ENCODING=windows-874
 EXPRESS_COMPANY_NAME=บริษัท ของฉัน จำกัด
 ```
 
-**kknang (Windows + WSL):** สมุดอยู่ที่ `C:\ExpressI` = `/mnt/c/ExpressI` ใน Debian WSL. ใส่ค่านั้นใน `EXPRESS_HOST_DATA_DIR` แล้ว `docker compose` จะ bind-mount แบบ `:ro`
+**kknang (Windows + WSL):** โปรแกรมอยู่ที่ `C:\ExpressI` = `/mnt/c/ExpressI` ใน Debian WSL
 
-ก่อนขึ้นจริง:
+- แฟ้มมาสเตอร์ของบริษัทหลักอยู่โฟลเดอร์ `dat/` (ไม่ใช่ราก และไม่ใช่ชื่อ `DATA`)
+- ชุดที่ทีมทดลอง AI ใช้อยู่ตอนนี้คือ `/mnt/c/ExpressI/test` — ชี้ `EXPRESS_HOST_DATA_DIR` ไปที่นั้นเมื่ออยากให้คอนเนคเตอร์อ่านสมุดทดสอบ
+- ใน Linux container ชื่อไฟล์เป็น case-sensitive; `sub-mcp-express` จับ `ARMAS.DBF` / `armas.dbf` และโฟลเดอร์ `dat`/`DATA` ให้แล้ว
 
 ```bash
-ls /mnt/c/ExpressI | grep -iE 'ARMAS|APMAS|STMAS|GLMAS|\.dbf$'
+ls /mnt/c/ExpressI /mnt/c/ExpressI/dat /mnt/c/ExpressI/test 2>/dev/null | grep -iE 'ARMAS|APMAS|STMAS|GLMAS|\.dbf$'
 ```
-
-ถ้า `.DBF` อยู่ในโฟลเดอร์ลูก (เช่น `DATA` หรือชื่อบริษัท) ให้ชี้ `EXPRESS_HOST_DATA_DIR` ไปที่โฟลเดอร์ที่มี `ARMAS.DBF` ไม่ใช่แค่รากโปรแกรม
 
 ต้องมีอย่างน้อยหนึ่งใน `ARMAS.DBF`, `APMAS.DBF`, `STMAS.DBF` — `GLMAS.DBF` เป็นทางเลือก
 

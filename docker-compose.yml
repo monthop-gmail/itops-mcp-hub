@@ -81,12 +81,15 @@ services:
         condition: service_healthy
       sub-mcp-meshcentral:
         condition: service_healthy
+      sub-mcp-rag:
+        condition: service_healthy
     environment:
       HUB_ROLE: it
       PORT: "3000"
       MCP_PUBLIC_BASE_PATH: /mcp/it
       ZABBIX_MCP_URL: http://sub-mcp-zabbix:3000
       MESHCENTRAL_MCP_URL: http://sub-mcp-meshcentral:3000
+      RAG_MCP_URL: http://sub-mcp-rag:3000
     expose:
       - "3000"
 
@@ -104,12 +107,15 @@ services:
         condition: service_healthy
       sub-mcp-meshcentral:
         condition: service_healthy
+      sub-mcp-rag:
+        condition: service_healthy
     environment:
       HUB_ROLE: admin
       PORT: "3000"
       MCP_PUBLIC_BASE_PATH: /mcp/admin
       ZABBIX_MCP_URL: http://sub-mcp-zabbix:3000
       MESHCENTRAL_MCP_URL: http://sub-mcp-meshcentral:3000
+      RAG_MCP_URL: http://sub-mcp-rag:3000
     expose:
       - "3000"
 
@@ -125,11 +131,14 @@ services:
     depends_on:
       sub-mcp-express:
         condition: service_healthy
+      sub-mcp-rag:
+        condition: service_healthy
     environment:
       HUB_ROLE: accounting
       PORT: "3000"
       MCP_PUBLIC_BASE_PATH: /mcp/accounting
       EXPRESS_MCP_URL: http://sub-mcp-express:3000
+      RAG_MCP_URL: http://sub-mcp-rag:3000
     expose:
       - "3000"
 
@@ -197,6 +206,33 @@ services:
       - ${EXPRESS_HOST_DATA_DIR:-./data/express}:/data/express:ro
     expose:
       - "3000"
+
+  sub-mcp-rag:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-rag
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    user: "0:0"
+    environment:
+      PORT: "3000"
+      RAG_BACKEND: ${RAG_BACKEND:-fixture}
+      RAG_DATA_DIR: /data/docs
+      RAG_INDEX_PATH: /data/rag/index.sqlite
+    volumes:
+      - ${RAG_HOST_DATA_DIR:-./data/docs}:/data/docs:ro
+      - ${RAG_HOST_INDEX_DIR:-./data/rag}:/data/rag
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
 
   zabbix-db:
     image: postgres:16-alpine

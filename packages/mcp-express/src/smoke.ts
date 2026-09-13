@@ -83,6 +83,22 @@ async function main(): Promise<void> {
     throw new Error("dbf store did not find ARMAS in DATA subdirectory");
   }
 
+  const datRoot = mkdtempSync(join(tmpdir(), "express-dat-"));
+  mkdirSync(join(datRoot, "dat"));
+  writeSimpleDbf(
+    join(datRoot, "dat", "armas.dbf"),
+    [
+      { name: "CUSCOD", type: "C", length: 10 },
+      { name: "CUSNAM", type: "C", length: 40 },
+      { name: "BALANCE", type: "N", length: 12 },
+    ],
+    [{ CUSCOD: "C300", CUSNAM: "Lower Dat", BALANCE: "3" }],
+  );
+  const datBooks = await new DbfStore(datRoot, "ascii", "dat-case").load();
+  if (datBooks.customers[0]?.code !== "C300") {
+    throw new Error("dbf store did not find lowercase armas.dbf in dat/");
+  }
+
   console.log("express fixture smoke ok", books.status.company_name, books.customers.length);
 }
 
