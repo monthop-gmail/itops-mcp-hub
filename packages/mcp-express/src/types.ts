@@ -35,6 +35,10 @@ export interface ExpressInvoice {
   amount: number;
   balance: number;
   status: "open" | "paid" | "void";
+  /** Express ARTRN.DUEDAT when present */
+  due_date?: string;
+  /** Express ARTRN.RECTYP (1-char document class) */
+  doc_type?: string;
 }
 
 export interface ExpressGlAccount {

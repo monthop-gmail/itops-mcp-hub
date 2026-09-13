@@ -46,7 +46,7 @@ RAG_HOST_INDEX_DIR=./data/rag
 docker compose up -d --build sub-mcp-rag mcp-hub-it mcp-hub-admin mcp-hub-accounting
 ```
 
-อย่า commit ไฟล์งบจริงลง git
+คลัง PDF ใหญ่ (เช่น ~285MB ที่ kknang) จะอินเด็กซ์หลัง `/healthz` พร้อมแล้ว — `rag_get_status.indexing=true` จนกว่าจะ `ready`. อย่า commit ไฟล์งบจริงลง git
 
 ## สิ่งที่ยังไม่ทำในรอบนี้
 

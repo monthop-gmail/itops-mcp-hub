@@ -1,9 +1,10 @@
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { pickNumber, pickString, readDbfFile } from "./dbf.js";
+import { pickNumber, pickString, readDbfFile, type DbfRow } from "./dbf.js";
 import type {
   ExpressBooks,
   ExpressGlAccount,
+  ExpressInvoice,
   ExpressItem,
   ExpressParty,
   ExpressStore,
@@ -94,6 +95,7 @@ export class DbfStore implements ExpressStore {
     const apmas = findTable(resolved, "APMAS");
     const stmas = findTable(resolved, "STMAS");
     const glmas = findTable(resolved, "GLMAS");
+    const artrn = findTable(resolved, "ARTRN");
     if (!armas && !apmas && !stmas) {
       throw new Error(
         `No Express DBF masters in ${this.dataDir} (expected ARMAS.DBF / APMAS.DBF / STMAS.DBF under the folder or one level down)`,
@@ -107,6 +109,13 @@ export class DbfStore implements ExpressStore {
       : [];
     const items = stmas ? readDbfFile(stmas, this.encoding).map(itemFromRow) : [];
     const glAccounts = glmas ? readDbfFile(glmas, this.encoding).map(glFromRow) : [];
+    const visibleCustomers = customers.filter((row) => row.code || row.name);
+    const arInvoices = artrn
+      ? invoicesFromArtrn(readDbfFile(artrn, this.encoding), visibleCustomers)
+      : [];
+    const arNote = artrn
+      ? `; ใบแจ้งหนี้จาก ARTRN (${arInvoices.length} ใบ)`
+      : "; ไม่พบ ARTRN.DBF จึงยังไม่มีใบแจ้งหนี้";
     return {
       status: {
         ok: true,
@@ -115,12 +124,12 @@ export class DbfStore implements ExpressStore {
         backend: "dbf",
         company_name: this.companyName,
         sample: false,
-        note: `อ่าน DBF จาก ${resolved} แบบอ่านอย่างเดียว (Visual FoxPro / windows-874)`,
+        note: `อ่าน DBF จาก ${resolved} แบบอ่านอย่างเดียว (Visual FoxPro / windows-874)${arNote}`,
       },
-      customers: customers.filter((row) => row.code || row.name),
+      customers: visibleCustomers,
       vendors: vendors.filter((row) => row.code || row.name),
       items: items.filter((row) => row.code || row.name),
-      arInvoices: [],
+      arInvoices,
       glAccounts: glAccounts.filter((row) => row.code || row.name),
     };
   }
@@ -154,6 +163,75 @@ function itemFromRow(row: Record<string, string | number | boolean | null>): Exp
     on_hand: pickNumber(row, ["ONHAND", "QTY", "BALANC", "STKBAL"]),
     unit_price: pickNumber(row, ["SELLPR", "PRICE", "UNITPR"]),
   };
+}
+
+const PAID_EPS = 0.005;
+
+function invoicesFromArtrn(rows: DbfRow[], customers: ExpressParty[]): ExpressInvoice[] {
+  const names = new Map(customers.filter((row) => row.code).map((row) => [row.code, row.name]));
+  const invoices: ExpressInvoice[] = [];
+  for (const row of rows) {
+    const invoice = invoiceFromArtrnRow(row, names);
+    if (invoice) {
+      invoices.push(invoice);
+    }
+  }
+  invoices.sort((a, b) => `${b.doc_date}${b.doc_no}`.localeCompare(`${a.doc_date}${a.doc_no}`));
+  return invoices;
+}
+
+function invoiceFromArtrnRow(row: DbfRow, names: Map<string, string>): ExpressInvoice | null {
+  const docNo = pickString(row, ["DOCNUM", "INVNUM", "IVCNUM", "DOCNO"]);
+  const customerCode = pickString(row, ["CUSCOD", "CUSTCOD", "ARCOD"]);
+  if (!docNo || !customerCode) {
+    return null;
+  }
+  const recTyp = pickString(row, ["RECTYP", "DOCTYPE", "DOCTYP"]);
+  if (isReceiptType(recTyp)) {
+    return null;
+  }
+  const amount = pickNumber(row, ["NETAMT", "IVCAMT", "TOTAL", "AMOUNT", "AMT"]) ?? 0;
+  const received = pickNumber(row, ["RCVAMT", "PAYAMT"]) ?? 0;
+  const balance = pickNumber(row, ["REMAMT", "BALANCE", "AREBAL"]) ?? amount - received;
+  const dueDate = pickString(row, ["DUEDAT", "DUE_DATE", "DUEDATE"]) || undefined;
+  const status: ExpressInvoice["status"] = isCancelled(row)
+    ? "void"
+    : Math.abs(balance) < PAID_EPS
+      ? "paid"
+      : "open";
+  return {
+    doc_no: docNo,
+    doc_date: pickString(row, ["DOCDAT", "INVDATE", "DATE"]),
+    customer_code: customerCode,
+    customer_name: names.get(customerCode) || pickString(row, ["CUSNAM", "CUSTNAM", "ARNAM"]),
+    amount,
+    balance,
+    status,
+    due_date: dueDate,
+    doc_type: recTyp || undefined,
+  };
+}
+
+/** Receipts live mainly in ARRCPIT; RECTYP 4 is ใบเสร็จ in common Express charts. */
+function isReceiptType(recTyp: string): boolean {
+  const t = recTyp.trim().toUpperCase();
+  return t === "4" || t === "R" || t === "RC" || t === "RE";
+}
+
+function isCancelled(row: DbfRow): boolean {
+  for (const key of ["FLGCAN", "FLGDEL", "CANCEL", "VOID", "FLGVOID"] as const) {
+    const value = row[key];
+    if (value === true) {
+      return true;
+    }
+    if (typeof value === "string") {
+      const u = value.trim().toUpperCase();
+      if (["T", "Y", "1", "C", "V", "YES", "TRUE"].includes(u)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function glFromRow(row: Record<string, string | number | boolean | null>): ExpressGlAccount {
