@@ -58,6 +58,7 @@ interface Field {
 /**
  * Minimal dBase III / Visual FoxPro table reader (no memo fields).
  * Express Accounting on-prem stores masters as ARMAS/APMAS/STMAS .DBF
+ * and AR document headers as ARTRN .DBF.
  */
 export function readDbfFile(path: string, encoding = "windows-874"): DbfRow[] {
   const buf = readFileSync(path);

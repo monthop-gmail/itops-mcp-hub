@@ -19,7 +19,7 @@ ESG **ไม่มี REST API สาธารณะ** สำหรับรุ�
 | `express_list_customers` | ลูกหนี้ (ARMAS หรือ `GET /customers`) |
 | `express_list_vendors` | เจ้าหนี้ (APMAS หรือ `GET /vendors`) |
 | `express_list_items` | สินค้า (STMAS หรือ `GET /items`) |
-| `express_list_ar_invoices` | ใบแจ้งหนี้ค้าง / ทั้งหมด — โหมด `dbf` ยังว่างจนกว่าจะมี adapter รายการขาย |
+| `express_list_ar_invoices` | ใบแจ้งหนี้จาก `ARTRN` (ค่าเริ่ม `open` = ยังค้าง). join ชื่อลูกค้าจาก `ARMAS` |
 | `express_list_gl_accounts` | ผังบัญชี / ยอด (GLMAS หรือ `GET /gl-accounts`) |
 
 ทุกผลลัพธ์มี `sample: true` เมื่อเป็นข้อมูลจำลอง
@@ -70,10 +70,19 @@ EXPRESS_COMPANY_NAME=บริษัท ของฉัน จำกัด
 - ใน Linux container ชื่อไฟล์เป็น case-sensitive; `sub-mcp-express` จับ `ARMAS.DBF` / `armas.dbf` และโฟลเดอร์ `dat`/`DATA` ให้แล้ว
 
 ```bash
-ls /mnt/c/ExpressI /mnt/c/ExpressI/dat /mnt/c/ExpressI/test 2>/dev/null | grep -iE 'ARMAS|APMAS|STMAS|GLMAS|\.dbf$'
+ls /mnt/c/ExpressI /mnt/c/ExpressI/dat /mnt/c/ExpressI/test 2>/dev/null | grep -iE 'ARMAS|APMAS|STMAS|GLMAS|ARTRN|\.dbf$'
 ```
 
 ต้องมีอย่างน้อยหนึ่งใน `ARMAS.DBF`, `APMAS.DBF`, `STMAS.DBF` — `GLMAS.DBF` เป็นทางเลือก
+
+`express_list_ar_invoices` อ่าน **`ARTRN.DBF`** ในโฟลเดอร์เดียวกัน (หัวบิลลูกหนี้ของ Express ไม่ใช่รายบรรทัด `STCRD`)
+
+- เลขที่ `DOCNUM`, วันที่ `DOCDAT`, ลูกค้า `CUSCOD` + ชื่อจาก `ARMAS`
+- ยอด `NETAMT`, ค้าง `REMAMT` (ถ้าไม่มี คำนวณ `NETAMT - RCVAMT`)
+- `open` / `paid` จากยอดค้าง — `void` จาก `FLGCAN` / `CANCEL` ถ้ามี
+- ค่าเริ่มเครื่องมือเป็น `status=open` จึงไม่โชว์บิลที่ปิดแล้ว
+- ข้าม `RECTYP` 4 / R / RC / RE (ใบเสร็จในหลายไซต์; ตารางรับชำระหลักคือ `ARRCPIT` ไม่ได้อ่านในรอบนี้)
+- ใบลดหนี้ (`RECTYP` 0/5 ตามรายงาน ESG) ยังอยู่ในการ์ดใบแจ้งหนี้ ยอดอาจเป็นลบ
 
 ถ้า Express บน Windows กำลังเปิดแฟ้มอยู่ ไดรฟ์ NTFS อาจล็อก — คัดลอกชุด `.DBF` ไป `/var/lib/itops/express-snapshot` แล้วชี้ `EXPRESS_HOST_DATA_DIR` ไปที่สำเนา
 

@@ -96,7 +96,7 @@ export function registerExpressTools(server: McpServer, store: ExpressStore): vo
 
   server.tool(
     "express_list_ar_invoices",
-    "ใบแจ้งหนี้ลูกหนี้ (เปิดค้างหรือทั้งหมด). โหมด dbf ยังไม่มีตารางรายการขายจนกว่าจะต่อ HTTP adapter",
+    "ใบแจ้งหนี้ลูกหนี้จาก ARTRN (เปิดค้าง ค่าเริ่ม open). โหมด dbf อ่านอย่างเดียว ไม่รวมใบเสร็จ RECTYP 4",
     {
       status: z.enum(["open", "paid", "void", "all"]).optional().describe("ค่าเริ่ม open"),
       query: querySchema,

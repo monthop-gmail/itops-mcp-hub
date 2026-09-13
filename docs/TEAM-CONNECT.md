@@ -206,7 +206,7 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 | --- | --- |
 | อ่านปัญหา / สถานะเครื่อง / inventory | ได้ หลังมี HTTPS + IT token |
 | ให้ทีม ChatGPT / Grok ช่วยดูไซต์ | ได้ บนเส้น IT |
-| อ่านลูกหนี้ / สินค้า / GL จาก Express | ได้ บน `/mcp/accounting/mcp` (ค่าเริ่มเป็นข้อมูลตัวอย่าง) |
+| อ่านลูกหนี้ / สินค้า / GL / ใบแจ้งหนี้จาก Express | ได้ บน `/mcp/accounting/mcp` (fixture เป็นตัวอย่าง; `dbf` อ่าน ARMAS + ARTRN) |
 | สั่งคำสั่งบนเครื่องผ่าน MeshCentral | ยังไม่ได้ — รอ approval |
 | ลงรายการขายหรือแก้ไขสมุด Express | ไม่มีใน MCP นี้ — อ่านอย่างเดียว |
 
