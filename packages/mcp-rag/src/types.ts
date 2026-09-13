@@ -10,6 +10,7 @@ export interface RagStatus {
   file_count: number;
   chunk_count: number;
   skipped_count: number;
+  index_engine?: string;
   note: string;
 }
 

@@ -1,15 +1,29 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import Database from "better-sqlite3";
+import type { Database as SqliteDatabase } from "better-sqlite3";
 import { log } from "@itops/mcp-common";
 import { chunkText, titleFromPath } from "./chunk.js";
 import { extractFile, supportedExt } from "./extract.js";
-import { excerptAround, indexTokens, queryTokens } from "./ngram.js";
+import { prepareSearch } from "./fts-query.js";
+import { excerptAround } from "./ngram.js";
 import type { RagBackendKind, RagChunk, RagHit, RagSource, RagStatus } from "./types.js";
 import { walkFiles } from "./walk.js";
 
+const SCHEMA = "2";
+const FTS_DDL = `
+  CREATE VIRTUAL TABLE chunks_fts USING fts5(
+    path,
+    title,
+    text,
+    content='chunks',
+    content_rowid='id',
+    tokenize='trigram'
+  )
+`;
+
 export class RagCorpus {
-  private db: DatabaseSync | null = null;
+  private db: SqliteDatabase | null = null;
   private indexing = false;
   private lastError = "";
   private skipped = 0;
@@ -24,9 +38,11 @@ export class RagCorpus {
 
   open(): void {
     mkdirSync(dirname(this.indexPath), { recursive: true });
-    this.db = new DatabaseSync(this.indexPath);
+    this.db = new Database(this.indexPath);
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("busy_timeout = 5000");
+    assertFts5(this.db);
     this.db.exec(`
-      PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
       CREATE TABLE IF NOT EXISTS chunks (
         id INTEGER PRIMARY KEY,
@@ -35,13 +51,18 @@ export class RagCorpus {
         page INTEGER,
         text TEXT NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS ngrams (
-        gram TEXT NOT NULL,
-        chunk_id INTEGER NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS ngrams_gram ON ngrams(gram);
       CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
     `);
+    const schema = this.db.prepare("SELECT v FROM meta WHERE k = 'schema'").get() as { v: string } | undefined;
+    if (schema?.v !== SCHEMA) {
+      this.db.exec("DROP TABLE IF EXISTS ngrams; DROP TABLE IF EXISTS chunks_fts;");
+      this.db.exec(FTS_DDL);
+      this.db.prepare("INSERT OR REPLACE INTO meta(k, v) VALUES ('schema', ?)").run(SCHEMA);
+    } else {
+      this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+        path, title, text, content='chunks', content_rowid='id', tokenize='trigram'
+      )`);
+    }
   }
 
   close(): void {
@@ -67,6 +88,7 @@ export class RagCorpus {
       file_count: files.n,
       chunk_count: counts.n,
       skipped_count: this.skipped,
+      index_engine: "better-sqlite3 fts5 trigram",
       note: this.lastError || this.note,
     };
   }
@@ -79,20 +101,25 @@ export class RagCorpus {
     this.lastError = "";
     this.skipped = 0;
     try {
-      this.db!.exec("DELETE FROM ngrams; DELETE FROM chunks;");
+      this.db!.exec("DELETE FROM chunks;");
+      this.db!.exec("DROP TABLE IF EXISTS chunks_fts;");
+      this.db!.exec(FTS_DDL);
       const files = walkFiles(this.dataDir);
       log("info", "RAG indexing start", {
         backend: this.backend,
         files: files.length,
         dataDir: this.dataDir,
+        engine: "fts5-trigram",
       });
       const insertChunk = this.db!.prepare(
         "INSERT INTO chunks(path, title, page, text) VALUES (?, ?, ?, ?)",
       );
-      const insertGram = this.db!.prepare("INSERT INTO ngrams(gram, chunk_id) VALUES (?, ?)");
+      const insertFts = this.db!.prepare(
+        "INSERT INTO chunks_fts(rowid, path, title, text) VALUES (?, ?, ?, ?)",
+      );
       this.db!.exec("BEGIN");
       let fileIndex = 0;
-      let gramWrites = 0;
+      let chunkWrites = 0;
       for (const file of files) {
         fileIndex += 1;
         if (supportedExt(file.absPath) === "skip") {
@@ -107,13 +134,10 @@ export class RagCorpus {
         const title = titleFromPath(file.relPath);
         for (const piece of chunkText(extracted.text)) {
           const result = insertChunk.run(file.relPath, title, piece.page, piece.text);
-          const chunkId = Number(result.lastInsertRowid);
-          for (const gram of indexTokens(piece.text)) {
-            insertGram.run(gram, chunkId);
-            gramWrites += 1;
-            if (gramWrites % 4000 === 0) {
-              await yieldEventLoop();
-            }
+          insertFts.run(Number(result.lastInsertRowid), file.relPath, title, piece.text);
+          chunkWrites += 1;
+          if (chunkWrites % 80 === 0) {
+            await yieldEventLoop();
           }
         }
         log("info", "RAG indexed file", {
@@ -127,6 +151,7 @@ export class RagCorpus {
       this.db!.prepare("INSERT OR REPLACE INTO meta(k, v) VALUES ('indexed_at', ?)").run(
         new Date().toISOString(),
       );
+      this.db!.prepare("INSERT OR REPLACE INTO meta(k, v) VALUES ('schema', ?)").run(SCHEMA);
     } catch (error) {
       try {
         this.db?.exec("ROLLBACK");
@@ -167,38 +192,19 @@ export class RagCorpus {
 
   search(query: string, limit = 8, pathPrefix?: string): RagHit[] {
     this.requireReady();
-    const tokens = queryTokens(query);
-    if (tokens.length === 0) {
+    const prepared = prepareSearch(query);
+    if (!prepared.match && prepared.likes.length === 0) {
       return [];
     }
     const prefix = (pathPrefix ?? "").replaceAll("\\", "/");
-    const placeholders = tokens.map(() => "?").join(",");
-    const sql = `
-      SELECT c.id, c.path, c.title, c.page, c.text, COUNT(*) AS hits
-      FROM ngrams n
-      JOIN chunks c ON c.id = n.chunk_id
-      WHERE n.gram IN (${placeholders})
-        AND (? = '' OR c.path LIKE ?)
-      GROUP BY c.id
-      ORDER BY hits DESC, c.path ASC
-      LIMIT ?
-    `;
-    const rows = this.db!.prepare(sql).all(...tokens, prefix, prefix ? `${prefix}%` : "", limit) as Array<{
-      id: number;
-      path: string;
-      title: string;
-      page: number | null;
-      text: string;
-      hits: number;
-    }>;
-    return rows.map((row) => ({
-      chunk_id: Number(row.id),
-      path: row.path,
-      title: row.title,
-      page: row.page,
-      score: Number(row.hits) / tokens.length,
-      excerpt: excerptAround(row.text, query),
-    }));
+    try {
+      return this.searchFts(query, prepared, prefix, limit);
+    } catch (error) {
+      log("warn", "FTS5 MATCH failed; falling back to LIKE", {
+        err: error instanceof Error ? error.message : String(error),
+      });
+      return this.searchLike(query, prepared.likes.length > 0 ? prepared.likes : [`%${query}%`], prefix, limit);
+    }
   }
 
   getChunk(id: number): RagChunk | null {
@@ -209,6 +215,67 @@ export class RagCorpus {
     return row ?? null;
   }
 
+  private searchFts(
+    query: string,
+    prepared: ReturnType<typeof prepareSearch>,
+    prefix: string,
+    limit: number,
+  ): RagHit[] {
+    if (!prepared.match) {
+      return this.searchLike(query, prepared.likes, prefix, limit);
+    }
+    const likeSql = prepared.likes.map(() => "AND c.text LIKE ? ESCAPE '\\'").join(" ");
+    const sql = `
+      SELECT c.id, c.path, c.title, c.page, c.text, bm25(chunks_fts) AS rank
+      FROM chunks_fts
+      JOIN chunks c ON c.id = chunks_fts.rowid
+      WHERE chunks_fts MATCH ?
+        AND (? = '' OR c.path LIKE ?)
+        ${likeSql}
+      ORDER BY rank ASC, c.path ASC
+      LIMIT ?
+    `;
+    const rows = this.db!.prepare(sql).all(
+      prepared.match,
+      prefix,
+      prefix ? `${prefix}%` : "",
+      ...prepared.likes,
+      limit,
+    ) as Array<{
+      id: number;
+      path: string;
+      title: string;
+      page: number | null;
+      text: string;
+      rank: number;
+    }>;
+    return rows.map((row) => toHit(row, query));
+  }
+
+  private searchLike(query: string, likes: string[], prefix: string, limit: number): RagHit[] {
+    if (likes.length === 0) {
+      return [];
+    }
+    const likeSql = likes.map(() => "text LIKE ? ESCAPE '\\'").join(" AND ");
+    const sql = `
+      SELECT id, path, title, page, text, 0 AS rank
+      FROM chunks
+      WHERE ${likeSql}
+        AND (? = '' OR path LIKE ?)
+      ORDER BY path ASC
+      LIMIT ?
+    `;
+    const rows = this.db!.prepare(sql).all(...likes, prefix, prefix ? `${prefix}%` : "", limit) as Array<{
+      id: number;
+      path: string;
+      title: string;
+      page: number | null;
+      text: string;
+      rank: number;
+    }>;
+    return rows.map((row) => toHit(row, query));
+  }
+
   private requireReady(): void {
     if (!this.db) {
       throw new Error("RAG index is not open");
@@ -216,6 +283,31 @@ export class RagCorpus {
     if (this.indexing) {
       throw new Error("RAG is still indexing — เรียก rag_get_status แล้วลองใหม่");
     }
+  }
+}
+
+function toHit(
+  row: { id: number; path: string; title: string; page: number | null; text: string; rank: number },
+  query: string,
+): RagHit {
+  const rank = Number(row.rank);
+  return {
+    chunk_id: Number(row.id),
+    path: row.path,
+    title: row.title,
+    page: row.page,
+    score: Number.isFinite(rank) ? -rank : 0,
+    excerpt: excerptAround(row.text, query),
+  };
+}
+
+function assertFts5(db: SqliteDatabase): void {
+  const rows = db.prepare("PRAGMA compile_options").all() as Array<{ compile_options: string }>;
+  const enabled = rows.some((row) => row.compile_options.includes("ENABLE_FTS5"));
+  if (!enabled) {
+    throw new Error(
+      "SQLite build has no FTS5. Stock better-sqlite3 already sets SQLITE_ENABLE_FTS5 — do not swap in a custom amalgamation without that flag.",
+    );
   }
 }
 
