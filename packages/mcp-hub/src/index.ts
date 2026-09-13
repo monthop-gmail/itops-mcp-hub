@@ -26,12 +26,14 @@ const role = parseRole(optionalEnv("HUB_ROLE", "it"));
 const name = hubName(role);
 
 function createBackends(): HubBackends {
+  const rag = new BackendMcpClient("rag", requireEnv("RAG_MCP_URL"));
   if (role === "accounting") {
-    return { express: new BackendMcpClient("express", requireEnv("EXPRESS_MCP_URL")) };
+    return { express: new BackendMcpClient("express", requireEnv("EXPRESS_MCP_URL")), rag };
   }
   return {
     zabbix: new BackendMcpClient("zabbix", requireEnv("ZABBIX_MCP_URL")),
     meshcentral: new BackendMcpClient("meshcentral", requireEnv("MESHCENTRAL_MCP_URL")),
+    rag,
   };
 }
 
@@ -51,6 +53,7 @@ log("info", "starting MCP hub", {
   zabbix: optionalEnv("ZABBIX_MCP_URL"),
   meshcentral: optionalEnv("MESHCENTRAL_MCP_URL"),
   express: optionalEnv("EXPRESS_MCP_URL"),
+  rag: optionalEnv("RAG_MCP_URL"),
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),
 });
 

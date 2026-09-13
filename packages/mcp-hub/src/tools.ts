@@ -24,11 +24,13 @@ export interface HubBackends {
   zabbix?: BackendMcpClient;
   meshcentral?: BackendMcpClient;
   express?: BackendMcpClient;
+  rag?: BackendMcpClient;
 }
 
 export function registerHubTools(server: McpServer, backends: HubBackends, role: HubRole): void {
   if (role === "accounting") {
     registerAccountingTools(server, requireBackend(backends.express, "express"));
+    registerRagTools(server, requireBackend(backends.rag, "rag"));
     return;
   }
 
@@ -68,6 +70,8 @@ export function registerHubTools(server: McpServer, backends: HubBackends, role:
     async () => meshcentral.callTool("meshcentral_get_inventory", {}),
   );
 
+  registerRagTools(server, requireBackend(backends.rag, "rag"));
+
   if (role !== "admin") {
     return;
   }
@@ -88,6 +92,46 @@ function requireBackend(client: BackendMcpClient | undefined, name: string): Bac
     throw new Error(`MCP hub backend '${name}' is not configured`);
   }
   return client;
+}
+
+function registerRagTools(server: McpServer, rag: BackendMcpClient): void {
+  server.tool(
+    "rag_get_status",
+    "สถานะคลังเอกสาร RAG (งบประมาณ/ราชการในโฟลเดอร์ท้องถิ่น)",
+    {},
+    async () => rag.callTool("rag_get_status", {}),
+  );
+  server.tool(
+    "rag_list_sources",
+    "รายการไฟล์ที่อินเด็กซ์แล้ว ใช้ path เป็นโครงสร้าง",
+    {
+      path_prefix: z.string().min(1).optional().describe("กรอง path"),
+      limit: z.number().int().min(1).max(200).optional(),
+    },
+    async (args) => rag.callTool("rag_list_sources", args),
+  );
+  server.tool(
+    "rag_search",
+    "ค้นเอกสารในคลังท้องถิ่น คืน excerpt + path + หน้า สำหรับอ้างอิง",
+    {
+      query: z.string().min(2).describe("คำค้น"),
+      path_prefix: z.string().min(1).optional(),
+      limit: z.number().int().min(1).max(30).optional(),
+    },
+    async (args) => rag.callTool("rag_search", args),
+  );
+  server.tool(
+    "rag_get_chunk",
+    "อ่านชิ้นข้อความเต็มจาก chunk_id ที่ได้จาก rag_search",
+    { chunk_id: z.number().int().positive() },
+    async (args) => rag.callTool("rag_get_chunk", args),
+  );
+  server.tool(
+    "rag_reindex",
+    "สร้างอินเด็กซ์ใหม่จากโฟลเดอร์เอกสาร (อ่านอย่างเดียว)",
+    {},
+    async () => rag.callTool("rag_reindex", {}),
+  );
 }
 
 function registerAccountingTools(server: McpServer, express: BackendMcpClient): void {

@@ -11,5 +11,10 @@ meshcentral-backup/
 data/express/*.DBF
 data/express/*.dbf
 !data/express/README.md
+data/docs/**
+!data/docs/README.md
+data/rag/**
+!data/rag/README.md
+*.sqlite
 agent-tools/
 terminals/

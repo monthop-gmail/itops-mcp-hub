@@ -1,10 +1,10 @@
 # IT Operations Hub
 
-เกตเวย์ MCP รวมศูนย์สำหรับงาน IT Operations และบัญชี Express — เอเจนต์ AI คุยกับ **Zabbix 7**, **MeshCentral**, และ **Express Accounting** (express.co.th) ผ่าน SSE และ Streamable HTTP หลัง Cloudflare Tunnel และ Nginx RBAC
+เกตเวย์ MCP รวมศูนย์สำหรับงาน IT Operations บัญชี Express และคลังเอกสารราชการ — เอเจนต์ AI คุยกับ **Zabbix 7**, **MeshCentral**, **Express Accounting**, และ **RAG งบประมาณ/เอกสารไซต์** ผ่าน SSE และ Streamable HTTP หลัง Cloudflare Tunnel และ Nginx RBAC
 
 A production Docker Compose stack:
 
-`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR, SSE/WebSocket) → mcp-hub-it | mcp-hub-admin | mcp-hub-accounting → sub-mcp-zabbix | sub-mcp-meshcentral | sub-mcp-express → Zabbix / MeshCentral / Express books`
+`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR) → mcp-hub-it | mcp-hub-admin | mcp-hub-accounting → sub-mcp-zabbix | sub-mcp-meshcentral | sub-mcp-express | sub-mcp-rag`
 
 All services share a single bridge network, `infra-net`. MCP hubs and databases are not published on the host. Only LAN/VPN ports for the gateway, Zabbix, and MeshCentral agents are bound.
 
@@ -23,16 +23,18 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
   Bearer ADMIN_TOKEN       → role admin       → /mcp/admin/*       (admin only)
   Bearer ACCOUNTING_TOKEN  → role accounting  → /mcp/accounting/*  (accounting only)
         |
-        +--> mcp-hub-it:3000           Zabbix + MeshCentral inventory
-        +--> mcp-hub-admin:3000        same + meshcentral_run_shell
-        +--> mcp-hub-accounting:3000   Express Accounting read-only
+        +--> mcp-hub-it:3000           Zabbix + MeshCentral inventory + RAG
+        +--> mcp-hub-admin:3000        same + meshcentral_run_shell + RAG
+        +--> mcp-hub-accounting:3000   Express Accounting read-only + RAG
                     |
                     +--> sub-mcp-zabbix / sub-mcp-meshcentral
                     +--> sub-mcp-express   fixture | http adapter | DBF
+                    +--> sub-mcp-rag       โฟลเดอร์เอกสารไซต์ (งบ 2570 ฯลฯ)
                               |
                               +--> zabbix-web / zabbix-server / zabbix-db
                               +--> meshcentral
-                              +--> Express books (sample, sidecar REST, or .DBF)
+                              +--> Express books
+                              +--> /mnt/c/data/2570 (หรือ fixture)
 ```
 
 ### Tools
@@ -50,8 +52,13 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
 | `express_list_items(query?, limit?)` | no | no | yes |
 | `express_list_ar_invoices(status?, query?, limit?)` | no | no | yes |
 | `express_list_gl_accounts(query?, limit?)` | no | no | yes |
+| `rag_get_status()` | yes | yes | yes |
+| `rag_list_sources(path_prefix?, limit?)` | yes | yes | yes |
+| `rag_search(query, path_prefix?, limit?)` | yes | yes | yes |
+| `rag_get_chunk(chunk_id)` | yes | yes | yes |
+| `rag_reindex()` | yes | yes | yes |
 
-Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Express tools are read-only; see [docs/EXPRESS.md](docs/EXPRESS.md).
+Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Express tools are read-only; see [docs/EXPRESS.md](docs/EXPRESS.md). Document RAG does not require a fourth connector URL; see [docs/RAG.md](docs/RAG.md).
 
 ## Requirements
 
@@ -308,6 +315,7 @@ packages/
   mcp-zabbix/             # Zabbix JSON-RPC tools
   mcp-meshcentral/        # MeshCentral control.ashx tools
   mcp-express/            # Express Accounting (fixture / HTTP / DBF)
+  mcp-rag/                # local document RAG (budget / government files)
   mcp-hub/                # aggregator; HUB_ROLE=it|admin|accounting
   mcp-oauth/              # OAuth 2.1 + DCR; /authorize asks for site token
 scripts/create-zabbix-api-token.mjs

@@ -65,8 +65,7 @@
     <main>
       <h1>IT Operations Hub</h1>
       <p>
-        เกตเวย์ MCP กลางสำหรับ Zabbix 7, MeshCentral และ Express Accounting — รับ SSE/HTTP จากเอเจนต์ AI
-        หลัง Cloudflare Tunnel และ Nginx RBAC
+        เกตเวย์ MCP กลางสำหรับ Zabbix 7, MeshCentral, Express Accounting และคลังเอกสาร RAG
       </p>
       <div class="panel row">
         <span class="pill"><span id="gw-dot" class="dot"></span> <span id="gw-label">กำลังตรวจเกตเวย์…</span></span>
@@ -83,7 +82,7 @@
             <tr>
               <td class="mono">/mcp/it/sse</td>
               <td><code>it</code> และ <code>admin</code></td>
-              <td>Zabbix read + MeshCentral inventory</td>
+              <td>Zabbix read + MeshCentral inventory + RAG เอกสาร</td>
             </tr>
             <tr>
               <td class="mono">/mcp/admin/sse</td>
@@ -93,7 +92,7 @@
             <tr>
               <td class="mono">/mcp/accounting/mcp</td>
               <td><code>accounting</code> เท่านั้น</td>
-              <td>Express Accounting อ่านอย่างเดียว</td>
+              <td>Express Accounting อ่านอย่างเดียว + RAG เอกสาร</td>
             </tr>
             <tr>
               <td class="mono">/mcp/it/mcp</td>

@@ -1,6 +1,6 @@
 # ทีมทดลอง MCP บน ChatGPT / Grok (read-only)
 
-ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / Express Accounting ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
+ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / Express Accounting / คลังเอกสาร ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
 
 สรุปสั้น: **ลองได้** ถ้าต่อเส้นที่ตรงบทบาท (`/mcp/it/` หรือ `/mcp/accounting/`) และมี URL แบบ HTTPS ที่อินเทอร์เน็ตถึงได้  
 ยัง **ห้าม** ส่ง `ADMIN_TOKEN` หรือเปิด `meshcentral_run_shell`
@@ -17,10 +17,12 @@
 | `zabbix_get_device_status` | สถานะโฮสต์ในกลุ่มที่ระบุ |
 | `zabbix_get_metrics` | ค่า item ของโฮสต์ |
 | `meshcentral_get_inventory` | รายการเครื่องใน MeshCentral |
+| `rag_search` / `rag_list_sources` | เอกสารงบ/ราชการของไซต์ (path คือโครงสร้าง) |
 
-ถ้า AI เห็นเครื่องมือที่ 5 (`meshcentral_run_shell`) แปลว่าต่อผิดเส้น — ถอดออกทันที
+ถ้า AI เห็น `meshcentral_run_shell` แปลว่าต่อผิดเส้น — ถอดออกทันที
 
-ทีมบัญชีเห็นเฉพาะเครื่องมือ `express_*` บน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
+ทีมบัญชีเห็น `express_*` บวกชุด `rag_*` เดียวกันบน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
+เอกสาร RAG ดู [RAG.md](RAG.md)
 
 ## สิ่งที่ยังใช้ไม่ได้จนกว่าจะมี tunnel
 
