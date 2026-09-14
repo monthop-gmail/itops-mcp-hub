@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
+import { normalizeThaiPdf, pickBetterThaiExtract } from "./thai-normalize.js";
 
 const TEXT_EXTS = new Set([".txt", ".md", ".markdown", ".csv", ".tsv", ".log", ".html", ".htm", ".json", ".xml"]);
 const PDF_EXTS = new Set([".pdf"]);
@@ -45,7 +46,7 @@ export async function extractFile(path: string): Promise<ExtractResult> {
   try {
     const raw = readFileSync(path);
     const text = decodeDocument(raw);
-    return { ok: true, text: stripMarkup(path, text), extractor: "text" };
+    return { ok: true, text: normalizeThaiPdf(stripMarkup(path, text)), extractor: "text" };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
   }
@@ -56,16 +57,36 @@ export type PdfPagesResult =
   | { ok: false; reason: string };
 
 export async function extractPdfPages(path: string): Promise<PdfPagesResult> {
-  const extracted = await runPdfToText(path);
-  if (!extracted.ok) {
-    return extracted;
+  const [layout, raw] = await Promise.all([runPdfToText(path, "layout"), runPdfToText(path, "raw")]);
+  if (!layout.ok && !raw.ok) {
+    return layout;
   }
   const reported = await pdfPageCount(path);
-  const pages = alignPdfPages(extracted.text, reported);
+  const layoutPages = layout.ok ? alignPdfPages(layout.text, reported) : [];
+  const rawPages = raw.ok ? alignPdfPages(raw.text, reported) : [];
+  const count = Math.max(layoutPages.length, rawPages.length, reported ?? 0);
+  const pages: string[] = [];
+  let usedRaw = 0;
+  for (let i = 0; i < count; i += 1) {
+    const layoutPage = layoutPages[i];
+    const rawPage = rawPages[i];
+    if (layoutPage != null && rawPage != null) {
+      const picked = pickBetterThaiExtract(layoutPage, rawPage);
+      pages.push(picked.text);
+      if (picked.source === "raw") {
+        usedRaw += 1;
+      }
+    } else if (rawPage != null) {
+      pages.push(pickBetterThaiExtract(rawPage, rawPage).text);
+      usedRaw += 1;
+    } else {
+      pages.push(pickBetterThaiExtract(layoutPage ?? "", layoutPage ?? "").text);
+    }
+  }
   return {
     ok: true,
     pages,
-    extractor: extracted.extractor,
+    extractor: usedRaw > 0 ? "pdftotext-layout+raw" : "pdftotext",
     page_count: pages.length,
   };
 }
@@ -119,8 +140,12 @@ function alignPdfPages(raw: string, reportedPages: number | null): string[] {
   return parts;
 }
 
-function runPdfToText(path: string): Promise<ExtractResult> {
-  return spawnText("pdftotext", ["-layout", "-enc", "UTF-8", path, "-"], 180_000, "pdftotext");
+function runPdfToText(path: string, mode: "layout" | "raw" = "layout"): Promise<ExtractResult> {
+  const args =
+    mode === "raw"
+      ? ["-raw", "-enc", "UTF-8", path, "-"]
+      : ["-layout", "-enc", "UTF-8", path, "-"];
+  return spawnText("pdftotext", args, 180_000, mode === "raw" ? "pdftotext-raw" : "pdftotext");
 }
 
 function pdfPageCount(path: string): Promise<number | null> {

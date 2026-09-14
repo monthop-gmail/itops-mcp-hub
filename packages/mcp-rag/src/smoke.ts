@@ -3,6 +3,7 @@ import { pageNeedsOcr } from "./extract.js";
 import { fixtureIndexPath, writeFixtureCorpus } from "./fixture.js";
 import { SYNTHETIC_OCR_PDF } from "./ocr.js";
 import { parseOcrModelText, resolveTyphoonModel, runTyphoonOcr } from "./providers.js";
+import { foldThai } from "./thai-normalize.js";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) {
@@ -45,6 +46,11 @@ async function main(): Promise<void> {
     }) as typeof fetch,
   );
   assert(mocked.text === "MOCK-HTTP-OCR" && mocked.model === "typhoon-ocr", "typhoon HTTP mock");
+  assert(
+    foldThai("ประจวบคีรีขันธ์") === foldThai("ประจวบคีรขี นั ธ์"),
+    "Prachuap combining-mark fold",
+  );
+  assert(foldThai("ครุภัณฑ์") === foldThai("ครุภณั ฑ์"), "khrueaphan combining-mark fold");
 
   const dir = writeFixtureCorpus();
   const corpus = new RagCorpus("fixture", dir, fixtureIndexPath(dir), true, "smoke", {
@@ -72,6 +78,14 @@ async function main(): Promise<void> {
   const latin = corpus.search("Zabbix");
   if (latin.length < 1) {
     throw new Error(`FTS5 missed latin token: ${JSON.stringify(latin)}`);
+  }
+  const prachuap = corpus.search("จังหวัดประจวบคีรีขันธ์");
+  if (prachuap.length < 1) {
+    throw new Error(`Thai vowel-fold missed Prachuap: ${JSON.stringify(prachuap)}`);
+  }
+  const equipment = corpus.search("ครุภัณฑ์");
+  if (equipment.length < 1) {
+    throw new Error(`Thai vowel-fold missed equipment heading: ${JSON.stringify(equipment)}`);
   }
   const shortThai = corpus.search("งบ");
   if (shortThai.length < 1) {

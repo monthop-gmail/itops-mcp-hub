@@ -22,8 +22,11 @@ export interface ServeMcpHttpOptions {
 }
 
 type TransportEntry =
-  | { kind: "streamable"; transport: StreamableHTTPServerTransport }
-  | { kind: "sse"; transport: SSEServerTransport };
+  | { kind: "streamable"; transport: StreamableHTTPServerTransport; lastSeen: number }
+  | { kind: "sse"; transport: SSEServerTransport; lastSeen: number };
+
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+const SESSION_MAX = 64;
 
 function normalizeBase(path: string | undefined): string {
   if (!path) {
@@ -51,6 +54,53 @@ export function serveMcpHttp(createServer: McpServerFactory, options: ServeMcpHt
   app.use(express.json({ limit: "4mb" }));
 
   const sessions = new Map<string, TransportEntry>();
+
+  const touch = (sessionId: string): void => {
+    const entry = sessions.get(sessionId);
+    if (entry) {
+      entry.lastSeen = Date.now();
+    }
+  };
+
+  const forget = (sessionId: string): void => {
+    const entry = sessions.get(sessionId);
+    sessions.delete(sessionId);
+    if (!entry) {
+      return;
+    }
+    try {
+      void entry.transport.close();
+    } catch {
+      // already closed
+    }
+  };
+
+  const evictIdleSessions = (): void => {
+    const now = Date.now();
+    for (const [sid, entry] of sessions) {
+      if (now - entry.lastSeen > SESSION_IDLE_MS) {
+        log("info", "mcp session idle-evicted", { service: options.name, sessionId: sid });
+        forget(sid);
+      }
+    }
+    while (sessions.size > SESSION_MAX) {
+      let oldestId: string | null = null;
+      let oldestAt = Number.POSITIVE_INFINITY;
+      for (const [sid, entry] of sessions) {
+        if (entry.lastSeen < oldestAt) {
+          oldestAt = entry.lastSeen;
+          oldestId = sid;
+        }
+      }
+      if (!oldestId) {
+        break;
+      }
+      log("info", "mcp session cap-evicted", { service: options.name, sessionId: oldestId });
+      forget(oldestId);
+    }
+  };
+
+  setInterval(evictIdleSessions, 60_000).unref();
 
   const health = (_req: Request, res: Response) => {
     res.status(200).json({
@@ -90,6 +140,7 @@ export function serveMcpHttp(createServer: McpServerFactory, options: ServeMcpHt
           jsonRpcError(res, 400, "Session exists but uses a different transport");
           return;
         }
+        touch(sessionId);
         await existing.transport.handleRequest(req, res, req.body);
         return;
       }
@@ -99,10 +150,12 @@ export function serveMcpHttp(createServer: McpServerFactory, options: ServeMcpHt
           sessionIdGenerator: () => randomUUID(),
           enableDnsRebindingProtection: false,
           onsessioninitialized: (sid) => {
-            sessions.set(sid, { kind: "streamable", transport });
+            sessions.set(sid, { kind: "streamable", transport, lastSeen: Date.now() });
+            evictIdleSessions();
             log("info", "streamable session initialized", {
               service: options.name,
               sessionId: sid,
+              sessions: sessions.size,
             });
           },
         });
@@ -143,7 +196,8 @@ export function serveMcpHttp(createServer: McpServerFactory, options: ServeMcpHt
     try {
       const postPath = `${publicBase}/messages` || "/messages";
       const transport = new SSEServerTransport(postPath, res);
-      sessions.set(transport.sessionId, { kind: "sse", transport });
+      sessions.set(transport.sessionId, { kind: "sse", transport, lastSeen: Date.now() });
+      evictIdleSessions();
       log("info", "sse session opened", {
         service: options.name,
         sessionId: transport.sessionId,
@@ -176,6 +230,7 @@ export function serveMcpHttp(createServer: McpServerFactory, options: ServeMcpHt
       jsonRpcError(res, 400, "No SSE transport for sessionId");
       return;
     }
+    touch(sessionId);
     try {
       await existing.transport.handlePostMessage(
         req as IncomingMessage,
@@ -201,11 +256,14 @@ export function serveMcpHttp(createServer: McpServerFactory, options: ServeMcpHt
     app.post(`${publicBase}/messages`, handleSseMessage);
   }
 
-  app.listen(options.port, "0.0.0.0", () => {
+  const server = app.listen(options.port, "0.0.0.0", () => {
     log("info", "MCP HTTP server listening", {
       service: options.name,
       port: options.port,
       publicBasePath: publicBase || "/",
     });
   });
+  server.keepAliveTimeout = 120_000;
+  server.headersTimeout = 125_000;
+  server.setTimeout(0);
 }

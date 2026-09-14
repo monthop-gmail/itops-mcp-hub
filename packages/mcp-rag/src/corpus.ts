@@ -27,6 +27,7 @@ import {
   type OcrRunFn,
 } from "./providers.js";
 import type { RagBackendKind, RagChunk, RagHit, RagOcrPage, RagSource, RagStatus } from "./types.js";
+import { ftsIndexText, normalizeThaiPdf } from "./thai-normalize.js";
 import { walkFiles } from "./walk.js";
 
 const SCHEMA = "2";
@@ -252,7 +253,11 @@ export class RagCorpus {
     }
     const prefix = (pathPrefix ?? "").replaceAll("\\", "/");
     try {
-      return this.searchFts(query, prepared, prefix, limit);
+      const hits = this.searchFts(query, prepared, prefix, limit);
+      if (hits.length > 0 || prepared.likes.length === 0) {
+        return hits;
+      }
+      return this.searchLike(query, prepared.likes, prefix, limit);
     } catch (error) {
       log("warn", "FTS5 MATCH failed; falling back to LIKE", {
         err: error instanceof Error ? error.message : String(error),
@@ -500,8 +505,9 @@ export class RagCorpus {
     );
     let n = 0;
     for (const piece of pieces) {
-      const result = insertChunk.run(relPath, title, piece.page, piece.text);
-      insertFts.run(Number(result.lastInsertRowid), relPath, title, piece.text);
+      const stored = normalizeThaiPdf(piece.text);
+      const result = insertChunk.run(relPath, title, piece.page, stored);
+      insertFts.run(Number(result.lastInsertRowid), relPath, title, ftsIndexText(stored));
       n += 1;
     }
     return n;

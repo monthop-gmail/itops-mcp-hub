@@ -1,3 +1,5 @@
+import { foldThai, normalizeThaiPdf } from "./thai-normalize.js";
+
 /** FTS5 trigram needs 3+ characters; shorter Thai terms fall back to LIKE. */
 
 export interface PreparedSearch {
@@ -6,7 +8,8 @@ export interface PreparedSearch {
 }
 
 export function prepareSearch(query: string): PreparedSearch {
-  const terms = query
+  const normalized = normalizeThaiPdf(query);
+  const terms = normalized
     .trim()
     .split(/\s+/)
     .map((term) => term.trim())
@@ -14,8 +17,14 @@ export function prepareSearch(query: string): PreparedSearch {
   const matchParts: string[] = [];
   const likes: string[] = [];
   for (const term of terms) {
+    const folded = foldThai(term);
     if ([...term].length >= 3) {
-      matchParts.push(`"${term.replaceAll('"', '""')}"`);
+      const quoted = `"${term.replaceAll('"', '""')}"`;
+      if (folded.length >= 3 && folded !== term.replace(/\s+/gu, "")) {
+        matchParts.push(`(${quoted} OR "${folded.replaceAll('"', '""')}")`);
+      } else {
+        matchParts.push(quoted);
+      }
     } else {
       likes.push(`%${escapeLike(term)}%`);
     }

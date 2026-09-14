@@ -204,6 +204,7 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 - อย่าเปิด Zabbix UI (`:9443`) หรือ MeshCentral (`:9444`) ออกอินเทอร์เน็ต เปิดเฉพาะ MCP gateway
 - อย่าใส่ token ใน URL (`?api_key=`) — โผล่ในล็อกพร็อกซี
 - อย่าใช้ `IT_TOKEN` กับ `/mcp/accounting/` และอย่าใช้ `ACCOUNTING_TOKEN` กับเส้น IT
+- ถ้า ChatGPT บอกว่า `itops-mcp-hub-accounting:` tools ไม่มีในเทิร์นนี้ — คอนเนคเตอร์หลุดเซสชัน (มักหลังยิงคิวรียาว) ให้ปิด/เปิด MCP แล้ว initialize ใหม่ ไม่ใช่หลักฐานว่าคลังเอกสารหาย
 - ค่าเริ่มสมุดบัญชีเป็นข้อมูล **fixture** (`sample: true`) จนกว่าไซต์จะต่อ Express DBF/HTTP, Allinone .mdb/MySQL หรือ Odoo `/jsonrpc`
 - ค่าเริ่ม ZKTime เป็น **fixture** จนกว่าไซต์จะต่อ `att2000.mdb` หรือ SQL Server
 
