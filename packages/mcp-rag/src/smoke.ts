@@ -1,14 +1,33 @@
 import { RagCorpus } from "./corpus.js";
+import { pageNeedsOcr } from "./extract.js";
 import { writeFixtureCorpus } from "./fixture.js";
+import { SYNTHETIC_OCR_PDF } from "./ocr.js";
 import { join } from "node:path";
 
+function assert(cond: unknown, message: string): asserts cond {
+  if (!cond) {
+    throw new Error(message);
+  }
+}
+
 async function main(): Promise<void> {
+  assert(pageNeedsOcr("   \n\t  ", 40), "whitespace-only page should need OCR");
+  assert(pageNeedsOcr("x".repeat(39), 40), "39 visible chars should need OCR at min 40");
+  assert(!pageNeedsOcr("x".repeat(40), 40), "40 visible chars should not need OCR at min 40");
+  assert(pageNeedsOcr("งบ\n\n  70", 40), "short Thai+digits page should need OCR");
+
   const dir = writeFixtureCorpus();
-  const corpus = new RagCorpus("fixture", dir, join(dir, "index.sqlite"), true, "smoke");
+  const corpus = new RagCorpus("fixture", dir, join(dir, "index.sqlite"), true, "smoke", {
+    includeImage: false,
+    minChars: 40,
+  });
   corpus.open();
   const status = await corpus.reindex();
   if (!status.ready || status.file_count < 3 || status.sample !== true) {
     throw new Error(`fixture index incomplete: ${JSON.stringify(status)}`);
+  }
+  if (!status.ocr || status.ocr.pending < 2 || status.ocr.include_image !== false) {
+    throw new Error(`expected fixture OCR queue: ${JSON.stringify(status.ocr)}`);
   }
   const hits = corpus.search("งบประมาณ 2570");
   if (hits.length < 1 || !hits[0]?.excerpt.includes("2570")) {
@@ -33,8 +52,56 @@ async function main(): Promise<void> {
   if (!chunk?.text) {
     throw new Error("get_chunk failed");
   }
+
+  const pending = corpus.listOcrQueue("pending");
+  const job = pending.find((row) => row.path === SYNTHETIC_OCR_PDF && row.page === 1);
+  if (!job) {
+    throw new Error(`missing synthetic OCR job: ${JSON.stringify(pending)}`);
+  }
+
+  let submitBlocked = false;
+  try {
+    corpus.submitOcr(job.id, "should not land");
+  } catch {
+    submitBlocked = true;
+  }
+  if (!submitBlocked) {
+    throw new Error("submit_ocr must refuse pending jobs");
+  }
+
+  const page = await corpus.getOcrPage(job.id);
+  if (page.image_included || !page.image_omitted_reason) {
+    throw new Error(`images must stay off by default: ${JSON.stringify(page)}`);
+  }
+
+  corpus.reviewOcrJob(job.id, "approve", "smoke");
+  const token = "OCR-FIXTURE-TOKEN-ALPHA";
+  const submitted = corpus.submitOcr(
+    job.id,
+    `ข้อความทดสอบคิว OCR fixture\n${token}\nไม่ใช่เอกสารงบจริง`,
+  );
+  if (submitted.job.status !== "done" || submitted.chunk_count < 1) {
+    throw new Error(`submit did not index sidecar: ${JSON.stringify(submitted)}`);
+  }
+  const ocrHits = corpus.search(token);
+  if (ocrHits.length < 1 || ocrHits[0]?.path !== SYNTHETIC_OCR_PDF) {
+    throw new Error(`search missed OCR sidecar: ${JSON.stringify(ocrHits)}`);
+  }
+
+  const after = await corpus.reindex();
+  if (!after.ocr || after.ocr.done < 1 || after.ocr.pending < 1) {
+    throw new Error(`reindex must keep done OCR jobs: ${JSON.stringify(after.ocr)}`);
+  }
+  const still = corpus.search(token);
+  if (still.length < 1) {
+    throw new Error("reindex dropped sidecar text");
+  }
+
   corpus.close();
-  console.log("rag fixture smoke ok", status.file_count, hits.length);
+  console.log("rag fixture smoke ok", status.file_count, hits.length, {
+    ocr_pending: after.ocr?.pending,
+    ocr_done: after.ocr?.done,
+  });
 }
 
 main().catch((err) => {

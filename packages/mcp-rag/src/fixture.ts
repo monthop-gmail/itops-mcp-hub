@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const NOTE =
-  "ข้อมูลจำลองใน fixture — ยังไม่ใช่เอกสารงบ 2570 จากรัฐสภา. ต่อคลังจริงด้วย RAG_BACKEND=files และ RAG_DATA_DIR=/data/docs";
+  "ข้อมูลจำลองใน fixture — ยังไม่ใช่เอกสารงบ 2570 จากรัฐสภา. ต่อคลังจริงด้วย RAG_BACKEND=files และ RAG_DATA_DIR=/data/docs. คิว OCR มีงานทดสอบ 2 หน้า (แบบสแกน-ปก) ที่ยังไม่มี PDF จริง";
 
 export const FIXTURE_NOTE = NOTE;
 

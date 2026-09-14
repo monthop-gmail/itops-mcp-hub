@@ -21,7 +21,7 @@ function createCorpus(): RagCorpus {
       dataDir,
       indexPath,
       false,
-      `อินเด็กซ์โฟลเดอร์ ${dataDir} ตาม path จริง — FTS5 trigram (better-sqlite3). PDF ใช้ pdftotext`,
+      `อินเด็กซ์โฟลเดอร์ ${dataDir} ตาม path จริง — FTS5 trigram. PDF ใช้ pdftotext; หน้าว่างเข้าคิว OCR (sidecar ใต้โฟลเดอร์อินเด็กซ์ ไม่ทับต้นฉบับ)`,
     );
   }
   const dataDir = writeFixtureCorpus();
@@ -42,6 +42,8 @@ const port = Number(optionalEnv("PORT", "3000"));
 log("info", "starting RAG MCP server", {
   port,
   backend: optionalEnv("RAG_BACKEND", "fixture"),
+  ocrIncludeImage: optionalEnv("RAG_OCR_INCLUDE_IMAGE", "false"),
+  ocrMinChars: optionalEnv("RAG_OCR_MIN_CHARS", "40"),
 });
 
 serveMcpHttp(createServer, {

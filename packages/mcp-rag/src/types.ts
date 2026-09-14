@@ -11,7 +11,34 @@ export interface RagStatus {
   chunk_count: number;
   skipped_count: number;
   index_engine?: string;
+  ocr?: {
+    pending: number;
+    approved: number;
+    rejected: number;
+    done: number;
+    include_image: boolean;
+    min_chars: number;
+  };
   note: string;
+}
+
+export interface RagOcrPage {
+  ok: true;
+  job: {
+    id: number;
+    path: string;
+    page: number;
+    status: string;
+    char_count: number;
+    excerpt: string;
+    note: string;
+    sidecar: string;
+    updated_at: string;
+  };
+  include_image: boolean;
+  image_included: boolean;
+  image_omitted_reason?: string;
+  image?: { mimeType: "image/jpeg"; data: string };
 }
 
 export interface RagSource {

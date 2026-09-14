@@ -153,6 +153,47 @@ function registerRagTools(server: McpServer, rag: BackendMcpClient): void {
     {},
     async () => rag.callTool("rag_reindex", {}),
   );
+  server.tool(
+    "rag_ocr_status",
+    "สรุปคิว OCR ของคลังเอกสาร (pending/approved/rejected/done) — ค่าเริ่มไม่ส่งภาพออกจากไซต์",
+    {},
+    async () => rag.callTool("rag_ocr_status", {}),
+  );
+  server.tool(
+    "rag_list_ocr_queue",
+    "รายการงาน OCR (ค่าเริ่ม pending) — metadata อย่างเดียว ไม่มีภาพ",
+    {
+      status: z.enum(["pending", "approved", "rejected", "done", "all"]).optional(),
+      path_prefix: z.string().min(1).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    async (args) => rag.callTool("rag_list_ocr_queue", args),
+  );
+  server.tool(
+    "rag_review_ocr_job",
+    "คัดกรองงาน OCR: approve หรือ reject ก่อนส่งข้อความ/ภาพออกจากไซต์",
+    {
+      job_id: z.number().int().positive(),
+      action: z.enum(["approve", "reject"]),
+      note: z.string().max(500).optional(),
+    },
+    async (args) => rag.callTool("rag_review_ocr_job", args),
+  );
+  server.tool(
+    "rag_get_ocr_page",
+    "metadata ของหน้าในคิว OCR — ภาพส่งเฉพาะเมื่อไซต์เปิด RAG_OCR_INCLUDE_IMAGE และงานถูก approve",
+    { job_id: z.number().int().positive() },
+    async (args) => rag.callTool("rag_get_ocr_page", args),
+  );
+  server.tool(
+    "rag_submit_ocr",
+    "บันทึกข้อความ OCR เป็น sidecar (ไม่ทับ PDF) แล้วอินเด็กซ์หน้านี้ — ต้อง approve ก่อน",
+    {
+      job_id: z.number().int().positive(),
+      text: z.string().min(1).max(200_000),
+    },
+    async (args) => rag.callTool("rag_submit_ocr", args),
+  );
 }
 
 function registerExpressTools(server: McpServer, express: BackendMcpClient): void {

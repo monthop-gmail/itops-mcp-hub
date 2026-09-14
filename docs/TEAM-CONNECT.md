@@ -20,6 +20,7 @@
 | `zktime_get_status` / `zktime_list_punches` | เข้า-ออกงาน ZKTime 5 (fixture จนกว่าไซต์จะต่อ `att2000.mdb`) |
 | `pstack_list_tools` / `pstack_call_tool` | เครื่องมือของอินสแตนซ์ pstack (ไม่ใช่เอเจนต์ในตัว) |
 | `rag_search` / `rag_list_sources` | เอกสารงบ/ราชการของไซต์ (path คือโครงสร้าง) |
+| `rag_list_ocr_queue` / `rag_review_ocr_job` | คิวหน้าสแกนว่าง — ต้อง approve ก่อนส่งข้อความ/ภาพ |
 
 ถ้า AI เห็น `meshcentral_run_shell` แปลว่าต่อผิดเส้น — ถอดออกทันที
 

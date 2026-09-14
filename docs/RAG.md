@@ -11,8 +11,9 @@
 
 1. **โฟลเดอร์ตามที่ไซต์ดึงมา** คือโครงสร้าง — อินเด็กซ์เก็บ `path` สัมพัทธ์เป็น citation
 2. **ค้นด้วย FTS5 trigram** ผ่าน `better-sqlite3` (คอมไพล์มาพร้อม `SQLITE_ENABLE_FTS5` อยู่แล้ว ไม่ต้อง amalgamation เอง) — ภาษาไทยไม่มีช่องว่างระหว่างคำ เลยใช้ tokenizer `trigram` ไม่ใช่ `unicode61`. คำสั้นกว่า 3 ตัวอักษรตกไป `LIKE`. `node:sqlite` ของ Node 22 **ไม่มี** FTS5
-3. **PDF** อ่านด้วย `pdftotext` (poppler) แบ่งหน้าด้วย form feed
-4. ไฟล์ที่ยังไม่รองรับ (docx/xlsx/สแกนรูป) นับเป็น `skipped` ใน `rag_get_status` — แปลงเป็น PDF/ข้อความทีหลังได้โดยไม่ย้ายต้นฉบับ
+3. **PDF** อ่านด้วย `pdftotext` (poppler) ครั้งเดียวต่อไฟล์ แล้วแบ่งหน้าด้วย form feed + `pdfinfo`
+4. หน้าที่มีตัวอักษรที่มองเห็นได้น้อยกว่า `RAG_OCR_MIN_CHARS` (ค่าเริ่ม 40) **ไม่ถูกอินเด็กซ์ว่าง ๆ** — เข้าคิว OCR แทน
+5. ไฟล์ที่ยังไม่รองรับ (docx/xlsx/รูปเดี่ยว) นับเป็น `skipped` ใน `rag_get_status` — แปลงเป็น PDF/ข้อความทีหลังได้โดยไม่ย้ายต้นฉบับ
 
 เมื่ออยากจำกัดขอบเขต ค้นด้วย `path_prefix` เช่น `งบประมาณ-2570/กระทรวงมหาดไทย`
 
@@ -20,13 +21,40 @@
 
 | Tool | ความหมาย |
 | --- | --- |
-| `rag_get_status` | fixture/files, จำนวนไฟล์/ชิ้น, กำลังอินเด็กซ์หรือยัง |
+| `rag_get_status` | fixture/files, จำนวนไฟล์/ชิ้น, คิว OCR, กำลังอินเด็กซ์หรือยัง |
 | `rag_list_sources` | รายการไฟล์ที่อ่านได้ |
 | `rag_search` | คืน excerpt + path + หน้า + `chunk_id` |
 | `rag_get_chunk` | อ่านชิ้นเต็ม |
-| `rag_reindex` | สร้างอินเด็กซ์ใหม่จากโฟลเดอร์ (อ่านอย่างเดียว) |
+| `rag_reindex` | สร้างอินเด็กซ์ใหม่จากโฟลเดอร์ (อ่านอย่างเดียว; คิวที่ approve/reject/done ไม่ถูกลบทิ้ง) |
+| `rag_ocr_status` | นับ pending/approved/rejected/done + ธงภาพ |
+| `rag_list_ocr_queue` | รายการงาน (ค่าเริ่ม pending) — ไม่มีภาพ |
+| `rag_review_ocr_job` | `approve` หรือ `reject` |
+| `rag_get_ocr_page` | metadata/excerpt; ภาพเฉพาะเมื่อเปิดธงและงานถูก approve |
+| `rag_submit_ocr` | บันทึกข้อความเป็น sidecar แล้วอินเด็กซ์หน้านี้ — **ต้อง approve ก่อน** |
 
 ผลจาก fixture มี `sample: true`
+
+## คิว OCR
+
+ไม่ OCR ทั้งคลัง — `pdftotext` ยังเป็นค่าเริ่ม
+
+1. หน้าที่เลือกข้อความได้น้อยเข้าคิว `pending`
+2. คน/เอเจนต์ในไซต์ `approve` หรือ `reject` ก่อนข้อความหรือภาพออกจากเครื่อง
+3. `rag_submit_ocr` เขียน sidecar ใต้โฟลเดอร์อินเด็กซ์ **ไม่ทับ PDF ต้นทาง** (โวลุ่มเอกสารเมานต์ `:ro`)
+
+```
+${RAG_HOST_INDEX_DIR}/ocr/<path>.p<หน้า>.ocr.md
+```
+
+ตัวอย่าง: `/data/rag/ocr/งบประมาณ-2570/สำนักงบประมาณ/แบบสแกน.pdf.p3.ocr.md`
+
+คลาวด์ ChatGPT / Grok / Gemini **ดึงไฟล์ใน LAN ไม่ได้** — ถ้าต้องการให้โมเดลสายตาช่วยอ่าน ให้ตั้ง `RAG_OCR_INCLUDE_IMAGE=true` แล้วเรียก `rag_get_ocr_page` หลัง approve (JPEG จาก `pdftoppm` จำกัด ~1.5MB) ค่าเริ่ม `false`
+
+คิวเดียวกันสลับตัวทำงานทีหลังได้ (Typhoon OCR API / GPU ในไซต์ / Tesseract `tha+eng`) โดยไม่เปลี่ยนเลย์เอาต์ sidecar — รอบนี้เป็นคิว + ชั้นคัดกรอง ไม่ใช่คนงานแบตช์
+
+อย่าส่งคลัง 2570 ออก API สาธารณะจนกว่าแต่ละไซต์จะตัดสินใจเรื่อง egress
+
+Fixture ไม่มี PDF สแกนจริง — มีงานทดสอบ 2 หน้าที่ `งบประมาณ-2570/สำนักงบประมาณ/แบบสแกน-ปก.pdf` เพื่อให้เครื่องมือคิวทำงาน
 
 ## ตั้งค่า
 
@@ -38,6 +66,8 @@
 RAG_BACKEND=files
 RAG_HOST_DATA_DIR=/mnt/c/data/2570
 RAG_HOST_INDEX_DIR=./data/rag
+RAG_OCR_INCLUDE_IMAGE=false
+RAG_OCR_MIN_CHARS=40
 ```
 
 แล้ว
@@ -48,10 +78,10 @@ docker compose up -d --build sub-mcp-rag mcp-hub-it mcp-hub-admin mcp-hub-accoun
 
 คลัง PDF ใหญ่ (เช่น ~285MB ที่ kknang) จะอินเด็กซ์หลัง `/healthz` พร้อมแล้ว — `rag_get_status.indexing=true` จนกว่าจะ `ready`. อย่า commit ไฟล์งบจริงลง git
 
-หลังอัปเดตเอนจิน อินเด็กซ์เก่า (`ngrams`) ถูกทิ้งแล้วสร้าง `chunks_fts` ใหม่ตอนบูต — ที่ kknang ให้ recreate `sub-mcp-rag` แล้วรอ `rag_get_status.ready`
+หลังอัปเดตเอนจิน อินเด็กซ์เก่า (`ngrams`) ถูกทิ้งแล้วสร้าง `chunks_fts` ใหม่ตอนบูต — ตาราง `ocr_jobs` อยู่ต่อได้ ถ้ามี sidecar จะถูกอ่านกลับเข้าอินเด็กซ์ ที่ kknang ให้ recreate `sub-mcp-rag` แล้วรอ `rag_get_status.ready`
 
 ## สิ่งที่ยังไม่ทำในรอบนี้
 
 - เวกเตอร์ embedding (BGE-M3 ฯลฯ) — เพิ่มเป็นชั้นที่ 2 เมื่อค้นคำพ้องที่ FTS5 ไม่จับ
-- OCR เอกสารสแกน
+- คนงาน OCR อัตโนมัติ (Typhoon / Tesseract / GPU) — คิวพร้อมแล้ว ยังไม่ยิงออกเอง
 - แยก collection ตามบทบาท (ตอนนี้คลังเดียวกันทั้ง IT/admin/บัญชี เพราะเป็นเอกสารราชการชุดเดียวกันต่อไซต์)

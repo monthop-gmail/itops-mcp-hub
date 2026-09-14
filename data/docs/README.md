@@ -2,3 +2,4 @@
 
 kknang: ใช้ /mnt/c/data/2570 ผ่าน RAG_HOST_DATA_DIR — ไม่ต้องจัดโฟลเดอร์ก่อน
 อย่า commit ไฟล์จริง
+ข้อความ OCR เก็บเป็น sidecar ใต้ RAG_HOST_INDEX_DIR/ocr ไม่ทับโฟลเดอร์นี้ (`:ro`)

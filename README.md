@@ -62,8 +62,12 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
 | `rag_search(query, path_prefix?, limit?)` | yes | yes | yes |
 | `rag_get_chunk(chunk_id)` | yes | yes | yes |
 | `rag_reindex()` | yes | yes | yes |
+| `rag_ocr_status()` / `rag_list_ocr_queue(...)` | yes | yes | yes |
+| `rag_review_ocr_job(job_id, action)` | yes | yes | yes |
+| `rag_get_ocr_page(job_id)` | yes | yes | yes |
+| `rag_submit_ocr(job_id, text)` | yes | yes | yes |
 
-Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only by default; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md), Odoo = [docs/ODOO.md](docs/ODOO.md) (write tools stay hidden until `ODOO_ALLOW_WRITE=true`). Attendance (ZKTime 5) is on the IT/admin hubs; see [docs/ZKTIME.md](docs/ZKTIME.md). pstack apps on the same hubs; see [docs/PSTACK.md](docs/PSTACK.md). Document RAG does not require a fourth connector URL; see [docs/RAG.md](docs/RAG.md).
+Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only by default; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md), Odoo = [docs/ODOO.md](docs/ODOO.md) (write tools stay hidden until `ODOO_ALLOW_WRITE=true`). Attendance (ZKTime 5) is on the IT/admin hubs; see [docs/ZKTIME.md](docs/ZKTIME.md). pstack apps on the same hubs; see [docs/PSTACK.md](docs/PSTACK.md). Document RAG does not require a fourth connector URL; scanned pages go through an OCR queue (approve before text/images leave the site). See [docs/RAG.md](docs/RAG.md).
 
 ## Requirements
 
