@@ -80,12 +80,12 @@
           </thead>
           <tbody>
             <tr>
-              <td class="mono">/mcp/it/sse</td>
+              <td class="mono">/mcp/it/mcp</td>
               <td><code>it</code> และ <code>admin</code></td>
               <td>Zabbix read + MeshCentral inventory + RAG เอกสาร</td>
             </tr>
             <tr>
-              <td class="mono">/mcp/admin/sse</td>
+              <td class="mono">/mcp/admin/mcp</td>
               <td><code>admin</code> เท่านั้น</td>
               <td>ชุดเดียวกัน + <code>meshcentral_run_shell</code></td>
             </tr>
@@ -94,18 +94,22 @@
               <td><code>accounting</code> เท่านั้น</td>
               <td>Express Accounting อ่านอย่างเดียว + RAG เอกสาร</td>
             </tr>
-            <tr>
-              <td class="mono">/mcp/it/mcp</td>
-              <td colspan="2">Streamable HTTP (transport ใหม่ของ MCP)</td>
-            </tr>
           </tbody>
         </table>
+        <p>
+          ใช้ <strong>Streamable HTTP</strong> ที่ลงท้าย <code>/mcp</code> — ChatGPT / Grok / Gemini / Cursor
+          ไม่ต้องต่อ <code>/sse</code>
+        </p>
         <p>
           ChatGPT / Grok / Gemini: เปิด <a href="/oauth/setup">/oauth/setup</a> เพื่อคัดลอก Client ID
           แล้วเชื่อม URL <code>/mcp/it/mcp</code> (งาน IT) หรือ <code>/mcp/accounting/mcp</code> (สมุด Express)
           แบบ OAuth — ครั้งแรกจะเปิดหน้าให้วางโทเคนของบทบาทนั้น
         </p>
         <p>ไคลเอนต์ที่ใส่เฮดเดอร์เองใช้ <code>Authorization: Bearer &lt;IT_TOKEN|ADMIN_TOKEN|ACCOUNTING_TOKEN&gt;</code> ได้เช่นกัน</p>
+        <p>
+          <code>/mcp/it/sse</code> และ <code>/mcp/admin/sse</code> ยังเปิดอยู่สำหรับ Claude Desktop รุ่นเก่า
+          ที่พูด SSE อย่างเดียว — ไม่ใช่เส้นหลัก
+        </p>
       </div>
 
       <h2>LAN services</h2>
