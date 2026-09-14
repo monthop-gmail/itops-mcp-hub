@@ -12,6 +12,8 @@ meshcentral-backup/
 data/express/*.DBF
 data/express/*.dbf
 !data/express/README.md
+data/allinone/**
+!data/allinone/README.md
 data/docs/**
 !data/docs/README.md
 data/rag/**

@@ -9,7 +9,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 FROM node:22-alpine
-RUN apk add --no-cache wget poppler-utils \
+RUN apk add --no-cache wget poppler-utils mdbtools \
     && addgroup -S itops && adduser -S itops -G itops
 WORKDIR /app
 ENV NODE_ENV=production

@@ -2,7 +2,9 @@
 
 เส้นบัญชีของ IT Operations Hub: **`/mcp/accounting/mcp`**
 
-โปรแกรมเป้าหมายคือ [Express Accounting](https://express.co.th/) ของ ESG (ไทย) — **ไม่ใช่** InvoiceXpress / express-invoice APIs จากต่างประเทศ
+ถ้าไซต์ใช้ Allinone ไม่ใช่ Express ให้ตั้ง `ACCOUNTING_PRODUCT=allinone` แล้วดู [ALLINONE.md](ALLINONE.md) แทนเอกสารนี้
+
+โปรแกรมเป้าหมายของเอกสารนี้คือ [Express Accounting](https://express.co.th/) ของ ESG (ไทย) — **ไม่ใช่** InvoiceXpress / express-invoice APIs จากต่างประเทศ และ**ไม่ใช่** Allinone ของ [allinonesoft.com](https://www.allinonesoft.com/)
 
 ## ข้อจำกัดของตัวโปรแกรม
 

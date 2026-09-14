@@ -19,17 +19,28 @@ const expressQuery = z
 const expressLimit = z.number().int().min(1).max(200).optional().describe("จำนวนแถวสูงสุด ค่าเริ่ม 50");
 
 export type HubRole = "it" | "admin" | "accounting";
+export type AccountingProduct = "express" | "allinone";
 
 export interface HubBackends {
   zabbix?: BackendMcpClient;
   meshcentral?: BackendMcpClient;
   express?: BackendMcpClient;
+  allinone?: BackendMcpClient;
   rag?: BackendMcpClient;
 }
 
-export function registerHubTools(server: McpServer, backends: HubBackends, role: HubRole): void {
+export function registerHubTools(
+  server: McpServer,
+  backends: HubBackends,
+  role: HubRole,
+  accountingProduct: AccountingProduct = "express",
+): void {
   if (role === "accounting") {
-    registerAccountingTools(server, requireBackend(backends.express, "express"));
+    if (accountingProduct === "allinone") {
+      registerAllinoneTools(server, requireBackend(backends.allinone, "allinone"));
+    } else {
+      registerExpressTools(server, requireBackend(backends.express, "express"));
+    }
     registerRagTools(server, requireBackend(backends.rag, "rag"));
     return;
   }
@@ -134,7 +145,7 @@ function registerRagTools(server: McpServer, rag: BackendMcpClient): void {
   );
 }
 
-function registerAccountingTools(server: McpServer, express: BackendMcpClient): void {
+function registerExpressTools(server: McpServer, express: BackendMcpClient): void {
   server.tool(
     "express_get_status",
     "สถานะการต่อ Express Accounting (express.co.th): โหมด fixture / http / dbf และชื่อกิจการ",
@@ -179,5 +190,54 @@ function registerAccountingTools(server: McpServer, express: BackendMcpClient): 
     "ผังบัญชี / ยอด GL จากแฟ้ม GLMAS (หรือ HTTP /gl-accounts)",
     { query: expressQuery, limit: expressLimit },
     async (args) => express.callTool("express_list_gl_accounts", args),
+  );
+}
+
+function registerAllinoneTools(server: McpServer, allinone: BackendMcpClient): void {
+  server.tool(
+    "allinone_get_status",
+    "สถานะการต่อ Allinone (allinonesoft.com): โหมด fixture / mdb (VM) / mysql (CS)",
+    {},
+    async () => allinone.callTool("allinone_get_status", {}),
+  );
+  server.tool(
+    "allinone_inspect_schema",
+    "รายชื่อตารางและคอลัมน์ Allinone (ไม่มีข้อมูลแถว)",
+    {},
+    async () => allinone.callTool("allinone_inspect_schema", {}),
+  );
+  server.tool(
+    "allinone_list_customers",
+    "รายชื่อลูกหนี้จากตาราง ARMST",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => allinone.callTool("allinone_list_customers", args),
+  );
+  server.tool(
+    "allinone_list_vendors",
+    "รายชื่อเจ้าหนี้จากตาราง APMST",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => allinone.callTool("allinone_list_vendors", args),
+  );
+  server.tool(
+    "allinone_list_items",
+    "รายการสินค้าจากตาราง INVMST",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => allinone.callTool("allinone_list_items", args),
+  );
+  server.tool(
+    "allinone_list_ar_invoices",
+    "ใบแจ้งหนี้ลูกหนี้จาก ARTR (ค่าเริ่ม open = ยังมี NBAL)",
+    {
+      status: z.enum(["open", "paid", "void", "all"]).optional().describe("ค่าเริ่ม open"),
+      query: expressQuery,
+      limit: expressLimit,
+    },
+    async (args) => allinone.callTool("allinone_list_ar_invoices", args),
+  );
+  server.tool(
+    "allinone_list_gl_accounts",
+    "ผังบัญชีจากตาราง GLMST",
+    { query: expressQuery, limit: expressLimit },
+    async (args) => allinone.callTool("allinone_list_gl_accounts", args),
   );
 }

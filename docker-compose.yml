@@ -131,13 +131,17 @@ services:
     depends_on:
       sub-mcp-express:
         condition: service_healthy
+      sub-mcp-allinone:
+        condition: service_healthy
       sub-mcp-rag:
         condition: service_healthy
     environment:
       HUB_ROLE: accounting
       PORT: "3000"
       MCP_PUBLIC_BASE_PATH: /mcp/accounting
+      ACCOUNTING_PRODUCT: ${ACCOUNTING_PRODUCT:-express}
       EXPRESS_MCP_URL: http://sub-mcp-express:3000
+      ALLINONE_MCP_URL: http://sub-mcp-allinone:3000
       RAG_MCP_URL: http://sub-mcp-rag:3000
     expose:
       - "3000"
@@ -204,6 +208,31 @@ services:
       EXPRESS_COMPANY_NAME: ${EXPRESS_COMPANY_NAME:-Express Accounting}
     volumes:
       - ${EXPRESS_HOST_DATA_DIR:-./data/express}:/data/express:ro
+    expose:
+      - "3000"
+
+  sub-mcp-allinone:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-allinone
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    environment:
+      PORT: "3000"
+      ALLINONE_BACKEND: ${ALLINONE_BACKEND:-fixture}
+      ALLINONE_DATA_DIR: /data/allinone
+      ALLINONE_MDB_FILE: ${ALLINONE_MDB_FILE:-}
+      ALLINONE_COMPANY_NAME: ${ALLINONE_COMPANY_NAME:-}
+      ALLINONE_MYSQL_HOST: ${ALLINONE_MYSQL_HOST:-}
+      ALLINONE_MYSQL_PORT: ${ALLINONE_MYSQL_PORT:-3306}
+      ALLINONE_MYSQL_USER: ${ALLINONE_MYSQL_USER:-}
+      ALLINONE_MYSQL_PASSWORD: ${ALLINONE_MYSQL_PASSWORD:-}
+      ALLINONE_MYSQL_DATABASE: ${ALLINONE_MYSQL_DATABASE:-}
+    volumes:
+      - ${ALLINONE_HOST_DATA_DIR:-./data/allinone}:/data/allinone:ro
     expose:
       - "3000"
 

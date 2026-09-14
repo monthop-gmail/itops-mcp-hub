@@ -31,10 +31,10 @@ export function renderAuthorizePage(input: AuthorizePageInput): string {
     input.roleHint === "admin"
       ? "URL นี้เป็นเส้น admin — วางเฉพาะ ADMIN_TOKEN ไม่ใช่โทเคน IT หรือบัญชี"
       : input.roleHint === "accounting"
-        ? "URL นี้เป็นเส้นบัญชี Express Accounting — วาง ACCOUNTING_TOKEN ไม่ใช่ IT/ADMIN"
+        ? "URL นี้เป็นเส้นบัญชี — วาง ACCOUNTING_TOKEN ไม่ใช่ IT/ADMIN"
         : input.roleHint === "it"
           ? "URL นี้เป็นเส้น IT (อ่านอย่างเดียว) — วาง IT_TOKEN (ADMIN_TOKEN ก็ใช้ได้บนเส้นนี้)"
-          : "วางโทเคนตามบทบาทที่ต้องการ — IT, admin หรือบัญชี Express";
+          : "วางโทเคนตามบทบาทที่ต้องการ — IT, admin หรือบัญชี";
   const error = input.error
     ? `<p class="error">${escapeHtml(input.error)}</p>`
     : "";
@@ -164,7 +164,7 @@ export function renderSetupPage(input: {
       <div class="panel">
         <table>
           ${row("MCP URL (IT)", input.mcpIt)}
-          ${row("MCP URL (บัญชี Express)", input.mcpAccounting)}
+          ${row("MCP URL (บัญชี)", input.mcpAccounting)}
           ${row("Client ID", input.clientId)}
           ${row("Client Secret", input.clientSecret)}
           ${row("Authorization Endpoint", `${input.issuer}/authorize`)}
@@ -193,7 +193,7 @@ export function renderSetupPage(input: {
           <li>เปิด PKCE ถ้ามีช่องให้เปิด — scope <code>mcp:it</code></li>
         </ol>
       </div>
-      <p>อย่าใส่ ADMIN_TOKEN ในฟอร์มเหล่านี้ถ้าแค่ทดลองอ่านสถานะ และอย่าใช้โทเคน IT กับสมุดบัญชี Express</p>
+      <p>อย่าใส่ ADMIN_TOKEN ในฟอร์มเหล่านี้ถ้าแค่ทดลองอ่านสถานะ และอย่าใช้โทเคน IT กับสมุดบัญชี</p>
     </main>
   </body>
 </html>`;

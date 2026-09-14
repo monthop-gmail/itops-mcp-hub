@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { log, optionalEnv, requireEnv, serveMcpHttp } from "@itops/mcp-common";
 import { BackendMcpClient } from "./backend.js";
-import { registerHubTools, type HubBackends, type HubRole } from "./tools.js";
+import { registerHubTools, type AccountingProduct, type HubBackends, type HubRole } from "./tools.js";
 
 const VERSION = "1.0.0";
 
@@ -25,9 +25,18 @@ function hubName(role: HubRole): string {
 const role = parseRole(optionalEnv("HUB_ROLE", "it"));
 const name = hubName(role);
 
+function parseAccountingProduct(raw: string): AccountingProduct {
+  return raw === "allinone" ? "allinone" : "express";
+}
+
+const accountingProduct = parseAccountingProduct(optionalEnv("ACCOUNTING_PRODUCT", "express"));
+
 function createBackends(): HubBackends {
   const rag = new BackendMcpClient("rag", requireEnv("RAG_MCP_URL"));
   if (role === "accounting") {
+    if (accountingProduct === "allinone") {
+      return { allinone: new BackendMcpClient("allinone", requireEnv("ALLINONE_MCP_URL")), rag };
+    }
     return { express: new BackendMcpClient("express", requireEnv("EXPRESS_MCP_URL")), rag };
   }
   return {
@@ -41,7 +50,7 @@ const backends = createBackends();
 
 function createServer(): McpServer {
   const server = new McpServer({ name, version: VERSION });
-  registerHubTools(server, backends, role);
+  registerHubTools(server, backends, role, accountingProduct);
   return server;
 }
 
@@ -53,6 +62,8 @@ log("info", "starting MCP hub", {
   zabbix: optionalEnv("ZABBIX_MCP_URL"),
   meshcentral: optionalEnv("MESHCENTRAL_MCP_URL"),
   express: optionalEnv("EXPRESS_MCP_URL"),
+  allinone: optionalEnv("ALLINONE_MCP_URL"),
+  accountingProduct,
   rag: optionalEnv("RAG_MCP_URL"),
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),
 });
