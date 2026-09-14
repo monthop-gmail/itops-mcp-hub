@@ -42,6 +42,7 @@ function createBackends(): HubBackends {
   return {
     zabbix: new BackendMcpClient("zabbix", requireEnv("ZABBIX_MCP_URL")),
     meshcentral: new BackendMcpClient("meshcentral", requireEnv("MESHCENTRAL_MCP_URL")),
+    zktime: new BackendMcpClient("zktime", requireEnv("ZKTIME_MCP_URL")),
     rag,
   };
 }
@@ -63,6 +64,7 @@ log("info", "starting MCP hub", {
   meshcentral: optionalEnv("MESHCENTRAL_MCP_URL"),
   express: optionalEnv("EXPRESS_MCP_URL"),
   allinone: optionalEnv("ALLINONE_MCP_URL"),
+  zktime: optionalEnv("ZKTIME_MCP_URL"),
   accountingProduct,
   rag: optionalEnv("RAG_MCP_URL"),
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),

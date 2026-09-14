@@ -1,10 +1,10 @@
 # IT Operations Hub
 
-เกตเวย์ MCP รวมศูนย์สำหรับงาน IT Operations บัญชี Express หรือ Allinone และคลังเอกสารราชการ — เอเจนต์ AI คุยกับ **Zabbix 7**, **MeshCentral**, **Express Accounting** หรือ **Allinone**, และ **RAG งบประมาณ/เอกสารไซต์** ผ่าน Streamable HTTP หลัง Cloudflare Tunnel และ Nginx RBAC
+เกตเวย์ MCP รวมศูนย์สำหรับงาน IT Operations บัญชี Express หรือ Allinone เข้า-ออกงาน ZKTime และคลังเอกสารราชการ — เอเจนต์ AI คุยกับ **Zabbix 7**, **MeshCentral**, **Express Accounting** หรือ **Allinone**, **ZKTime 5**, และ **RAG งบประมาณ/เอกสารไซต์** ผ่าน Streamable HTTP หลัง Cloudflare Tunnel และ Nginx RBAC
 
 A production Docker Compose stack:
 
-`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR) → mcp-hub-it | mcp-hub-admin | mcp-hub-accounting → sub-mcp-zabbix | sub-mcp-meshcentral | sub-mcp-express | sub-mcp-allinone | sub-mcp-rag`
+`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR) → mcp-hub-it | mcp-hub-admin | mcp-hub-accounting → sub-mcp-zabbix | sub-mcp-meshcentral | sub-mcp-express | sub-mcp-allinone | sub-mcp-zktime | sub-mcp-rag`
 
 All services share a single bridge network, `infra-net`. MCP hubs and databases are not published on the host. Only LAN/VPN ports for the gateway, Zabbix, and MeshCentral agents are bound.
 
@@ -23,18 +23,20 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
   Bearer ADMIN_TOKEN       → role admin       → /mcp/admin/*       (admin only)
   Bearer ACCOUNTING_TOKEN  → role accounting  → /mcp/accounting/*  (accounting only)
         |
-        +--> mcp-hub-it:3000           Zabbix + MeshCentral inventory + RAG
+        +--> mcp-hub-it:3000           Zabbix + MeshCentral inventory + ZKTime + RAG
         +--> mcp-hub-admin:3000        same + meshcentral_run_shell + RAG
         +--> mcp-hub-accounting:3000   Express หรือ Allinone อ่านอย่างเดียว + RAG
                     |
                     +--> sub-mcp-zabbix / sub-mcp-meshcentral
                     +--> sub-mcp-express   fixture | http adapter | DBF
                     +--> sub-mcp-allinone  fixture | Access .mdb | MySQL
+                    +--> sub-mcp-zktime    fixture | att2000.mdb | SQL Server
                     +--> sub-mcp-rag       โฟลเดอร์เอกสารไซต์ (งบ 2570 ฯลฯ)
                               |
                               +--> zabbix-web / zabbix-server / zabbix-db
                               +--> meshcentral
                               +--> Express DBF หรือ Allinone .mdb / MySQL
+                              +--> ZKTime att2000.mdb หรือ SQL Server
                               +--> /mnt/c/data/2570 (หรือ fixture)
 ```
 
@@ -47,6 +49,7 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
 | `zabbix_get_metrics(host_name, item_keys)` | yes | yes | no |
 | `meshcentral_get_inventory()` | yes | yes | no |
 | `meshcentral_run_shell(node_id, command)` | no | yes | no |
+| `zktime_*` | yes | yes | no |
 | `express_*` | no | no | yes เมื่อ `ACCOUNTING_PRODUCT=express` |
 | `allinone_*` | no | no | yes เมื่อ `ACCOUNTING_PRODUCT=allinone` |
 | `rag_get_status()` | yes | yes | yes |
@@ -55,7 +58,7 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
 | `rag_get_chunk(chunk_id)` | yes | yes | yes |
 | `rag_reindex()` | yes | yes | yes |
 
-Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md). Document RAG does not require a fourth connector URL; see [docs/RAG.md](docs/RAG.md).
+Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md). Attendance (ZKTime 5) is on the IT/admin hubs; see [docs/ZKTIME.md](docs/ZKTIME.md). Document RAG does not require a fourth connector URL; see [docs/RAG.md](docs/RAG.md).
 
 ## Requirements
 
@@ -316,6 +319,7 @@ packages/
   mcp-meshcentral/        # MeshCentral control.ashx tools
   mcp-express/            # Express Accounting (fixture / HTTP / DBF)
   mcp-allinone/           # Allinone CS/VM (fixture / Access / MySQL)
+  mcp-zktime/             # ZKTime 5 attendance (fixture / att2000.mdb / SQL Server)
   mcp-rag/                # local document RAG (budget / government files)
   mcp-hub/                # aggregator; HUB_ROLE=it|admin|accounting
   mcp-oauth/              # OAuth 2.1 + DCR; /authorize asks for site token
@@ -325,6 +329,7 @@ scripts/create-cloudflare-tunnel-token.sh
 .env.xx.example           # Cloudflare API sidecar (copy to gitignored .env.xx)
 docs/EXPRESS.md           # Express Accounting backends and RBAC
 docs/ALLINONE.md          # Allinone CS (MySQL) / VM (Access)
+docs/ZKTIME.md            # ZKTime 5 attendance (Access / SQL Server)
 ```
 
 ## Operations notes

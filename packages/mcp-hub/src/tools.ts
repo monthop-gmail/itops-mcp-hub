@@ -26,6 +26,7 @@ export interface HubBackends {
   meshcentral?: BackendMcpClient;
   express?: BackendMcpClient;
   allinone?: BackendMcpClient;
+  zktime?: BackendMcpClient;
   rag?: BackendMcpClient;
 }
 
@@ -47,6 +48,7 @@ export function registerHubTools(
 
   const zabbix = requireBackend(backends.zabbix, "zabbix");
   const meshcentral = requireBackend(backends.meshcentral, "meshcentral");
+  const zktime = requireBackend(backends.zktime, "zktime");
 
   server.tool(
     "zabbix_get_active_problems",
@@ -81,6 +83,7 @@ export function registerHubTools(
     async () => meshcentral.callTool("meshcentral_get_inventory", {}),
   );
 
+  registerZktimeTools(server, zktime);
   registerRagTools(server, requireBackend(backends.rag, "rag"));
 
   if (role !== "admin") {
@@ -190,6 +193,56 @@ function registerExpressTools(server: McpServer, express: BackendMcpClient): voi
     "ผังบัญชี / ยอด GL จากแฟ้ม GLMAS (หรือ HTTP /gl-accounts)",
     { query: expressQuery, limit: expressLimit },
     async (args) => express.callTool("express_list_gl_accounts", args),
+  );
+}
+
+function registerZktimeTools(server: McpServer, zktime: BackendMcpClient): void {
+  const query = z.string().min(1).optional().describe("ค้นหาชื่อหรือรหัสพนักงาน (ไม่สนตัวพิมพ์)");
+  const limit = z.number().int().min(1).max(200).optional().describe("จำนวนแถวสูงสุด ค่าเริ่ม 50");
+  const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("วันที่ YYYY-MM-DD");
+
+  server.tool(
+    "zktime_get_status",
+    "สถานะการต่อ ZKTime 5 (เข้า-ออกงาน): โหมด fixture / mdb / mssql",
+    {},
+    async () => zktime.callTool("zktime_get_status", {}),
+  );
+  server.tool(
+    "zktime_inspect_schema",
+    "รายชื่อตารางและคอลัมน์ ZKTime (ไม่มีข้อมูลแถว)",
+    {},
+    async () => zktime.callTool("zktime_inspect_schema", {}),
+  );
+  server.tool(
+    "zktime_list_employees",
+    "รายชื่อพนักงานจาก USERINFO (ไม่มี SSN / รหัสผ่าน / รูป / ลายนิ้วมือ)",
+    { query, limit },
+    async (args) => zktime.callTool("zktime_list_employees", args),
+  );
+  server.tool(
+    "zktime_list_punches",
+    "รายการสแกนเข้า-ออกจาก CHECKINOUT (I=in, O=out)",
+    {
+      from: date,
+      to: date,
+      check_type: z.enum(["in", "out", "all"]).optional().describe("ค่าเริ่ม all"),
+      query,
+      user_id: z.number().int().positive().optional(),
+      limit: z.number().int().min(1).max(500).optional(),
+    },
+    async (args) => zktime.callTool("zktime_list_punches", args),
+  );
+  server.tool(
+    "zktime_list_departments",
+    "แผนกจากตาราง DEPARTMENTS",
+    { query, limit },
+    async (args) => zktime.callTool("zktime_list_departments", args),
+  );
+  server.tool(
+    "zktime_list_devices",
+    "เครื่องสแกนจากตาราง Machines (ไม่มีรหัสสื่อสาร CommPassword)",
+    { query, limit },
+    async (args) => zktime.callTool("zktime_list_devices", args),
   );
 }
 

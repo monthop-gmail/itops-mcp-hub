@@ -1,0 +1,23 @@
+{
+  "name": "@itops/mcp-zktime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "smoke": "node dist/smoke.js"
+  },
+  "dependencies": {
+    "@itops/mcp-common": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "mssql": "^11.0.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/mssql": "^9.1.8",
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}

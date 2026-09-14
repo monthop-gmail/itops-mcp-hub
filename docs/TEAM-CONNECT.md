@@ -1,6 +1,6 @@
 # ทีมทดลอง MCP บน ChatGPT / Grok (read-only)
 
-ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / สมุดบัญชี (Express หรือ Allinone) / คลังเอกสาร ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
+ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / ZKTime เข้า-ออกงาน / สมุดบัญชี (Express หรือ Allinone) / คลังเอกสาร ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
 
 สรุปสั้น: **ลองได้** ถ้าต่อเส้นที่ตรงบทบาท (`/mcp/it/` หรือ `/mcp/accounting/`) และมี URL แบบ HTTPS ที่อินเทอร์เน็ตถึงได้  
 ยัง **ห้าม** ส่ง `ADMIN_TOKEN` หรือเปิด `meshcentral_run_shell`
@@ -9,7 +9,7 @@
 
 ## สิ่งที่ทีมจะเห็น
 
-เครื่องมือ 4 ตัวบน hub IT:
+เครื่องมือบน hub IT:
 
 | Tool | ใช้ถามอะไร |
 | --- | --- |
@@ -17,12 +17,14 @@
 | `zabbix_get_device_status` | สถานะโฮสต์ในกลุ่มที่ระบุ |
 | `zabbix_get_metrics` | ค่า item ของโฮสต์ |
 | `meshcentral_get_inventory` | รายการเครื่องใน MeshCentral |
+| `zktime_get_status` / `zktime_list_punches` | เข้า-ออกงาน ZKTime 5 (fixture จนกว่าไซต์จะต่อ `att2000.mdb`) |
 | `rag_search` / `rag_list_sources` | เอกสารงบ/ราชการของไซต์ (path คือโครงสร้าง) |
 
 ถ้า AI เห็น `meshcentral_run_shell` แปลว่าต่อผิดเส้น — ถอดออกทันที
 
 ทีมบัญชีเห็น `express_*` หรือ `allinone_*` (ตาม `ACCOUNTING_PRODUCT` ของไซต์) บวกชุด `rag_*` เดียวกันบน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
-เอกสาร RAG ดู [RAG.md](RAG.md)
+เอกสาร RAG ดู [RAG.md](RAG.md)  
+เข้า-ออกงาน ZKTime ดู [ZKTIME.md](ZKTIME.md) — รายงานสาธารณะแค่จำนวนแถว ห้าม dump รายชื่อพนักงาน
 
 ## สิ่งที่ยังใช้ไม่ได้จนกว่าจะมี tunnel
 
@@ -199,6 +201,7 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 - อย่าใส่ token ใน URL (`?api_key=`) — โผล่ในล็อกพร็อกซี
 - อย่าใช้ `IT_TOKEN` กับ `/mcp/accounting/` และอย่าใช้ `ACCOUNTING_TOKEN` กับเส้น IT
 - ค่าเริ่มสมุดบัญชีเป็นข้อมูล **fixture** (`sample: true`) จนกว่าไซต์จะต่อ Express DBF/HTTP หรือ Allinone .mdb/MySQL
+- ค่าเริ่ม ZKTime เป็น **fixture** จนกว่าไซต์จะต่อ `att2000.mdb` หรือ SQL Server
 
 ## เมื่อไหร่ต้องรอ ai-tools-mcp
 
@@ -207,6 +210,7 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 | อ่านปัญหา / สถานะเครื่อง / inventory | ได้ หลังมี HTTPS + IT token |
 | ให้ทีม ChatGPT / Grok ช่วยดูไซต์ | ได้ บนเส้น IT |
 | อ่านลูกหนี้ / สินค้า / GL / ใบแจ้งหนี้ | ได้ บน `/mcp/accounting/mcp` (Express `express_*` หรือ Allinone `allinone_*`) |
+| อ่านเข้า-ออกงาน ZKTime | ได้ บน `/mcp/it/mcp` (`zktime_*`, อ่านอย่างเดียว) |
 | สั่งคำสั่งบนเครื่องผ่าน MeshCentral | ยังไม่ได้ — รอ approval |
 | ลงรายการขายหรือแก้ไขสมุด | ไม่มีใน MCP นี้ — อ่านอย่างเดียว |
 
