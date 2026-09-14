@@ -91,7 +91,10 @@ Bring the stack up (LAN/VPN mode, no tunnel):
 
 ```bash
 docker compose up -d
+./scripts/smoke-test.sh
 ```
+
+`smoke-test.sh` checks Compose health, Bearer-only RBAC, OAuth discovery, and MCP initialize on the LAN port. It does not print tokens.
 
 First boot of Zabbix Postgres schema can take a couple of minutes. Watch:
 
@@ -159,8 +162,8 @@ This is the public path for AI clients. MeshCentral agents and Zabbix pollers st
 
 ### 1. Tunnel
 
-1. Zero Trust → **Networks** → **Tunnels** → Create a locally managed tunnel.
-2. Copy the token into `CLOUDFLARE_TUNNEL_TOKEN`.
+1. Zero Trust → **Networks** → **Tunnels** → Create a locally managed tunnel, **or** fill `.env.xx` from `.env.xx.example` and run `./scripts/create-cloudflare-tunnel-token.sh` (writes the token into `.env.xx`, never prints it).
+2. Copy `CLOUDFLARE_TUNNEL_TOKEN` into `.env`.
 3. Public hostname, for example `mcp.example.com`:
    - Type: HTTP
    - URL: `http://nginx:80`
@@ -319,6 +322,9 @@ packages/
   mcp-hub/                # aggregator; HUB_ROLE=it|admin|accounting
   mcp-oauth/              # OAuth 2.1 + DCR; /authorize asks for site token
 scripts/create-zabbix-api-token.mjs
+scripts/smoke-test.sh
+scripts/create-cloudflare-tunnel-token.sh
+.env.xx.example           # Cloudflare API sidecar (copy to gitignored .env.xx)
 docs/EXPRESS.md           # Express Accounting backends and RBAC
 ```
 
