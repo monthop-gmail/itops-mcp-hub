@@ -20,6 +20,12 @@ import {
   type OcrJob,
   type OcrJobStatus,
 } from "./ocr.js";
+import {
+  activeOcrProviderId,
+  listOcrProviders,
+  runConfiguredOcr,
+  type OcrRunFn,
+} from "./providers.js";
 import type { RagBackendKind, RagChunk, RagHit, RagOcrPage, RagSource, RagStatus } from "./types.js";
 import { walkFiles } from "./walk.js";
 
@@ -54,6 +60,8 @@ export interface RagCorpusOptions {
   includeImage?: boolean;
   minChars?: number;
   ocrDir?: string;
+  ocrRun?: OcrRunFn;
+  ocrRender?: () => Promise<{ mimeType: string; data: string }>;
 }
 
 export class RagCorpus {
@@ -64,6 +72,8 @@ export class RagCorpus {
   private readonly ocrDir: string;
   private readonly includeImage: boolean;
   private readonly minChars: number;
+  private readonly ocrRun: OcrRunFn;
+  private readonly ocrRender?: () => Promise<{ mimeType: string; data: string }>;
 
   constructor(
     private readonly backend: RagBackendKind,
@@ -77,6 +87,8 @@ export class RagCorpus {
     this.includeImage = options.includeImage ?? process.env.RAG_OCR_INCLUDE_IMAGE === "true";
     const parsed = Number(options.minChars ?? process.env.RAG_OCR_MIN_CHARS ?? 40);
     this.minChars = Number.isFinite(parsed) && parsed >= 0 ? parsed : 40;
+    this.ocrRun = options.ocrRun ?? ((input) => runConfiguredOcr(input));
+    this.ocrRender = options.ocrRender;
   }
 
   open(): void {
@@ -379,6 +391,55 @@ export class RagCorpus {
     return { job: updated, chunk_count: chunkCount };
   }
 
+  async runOcr(
+    jobId: number,
+    options: { provider?: string; save?: boolean } = {},
+  ): Promise<{
+    job: OcrJob;
+    provider: string;
+    model: string;
+    text: string;
+    excerpt: string;
+    saved: boolean;
+    chunk_count?: number;
+  }> {
+    this.requireReady();
+    const job = this.getOcrJob(jobId);
+    if (!job) {
+      throw new Error(`ไม่พบ ocr job_id ${jobId}`);
+    }
+    if (job.status !== "approved") {
+      throw new Error(`job_id ${jobId} สถานะ ${job.status} — ต้อง approve ก่อน rag_run_ocr`);
+    }
+    const image = await this.renderJobPage(job);
+    const result = await this.ocrRun({
+      provider: options.provider,
+      mimeType: image.mimeType,
+      data: image.data,
+    });
+    const excerpt = ocrExcerpt(result.text);
+    if (!options.save) {
+      return {
+        job,
+        provider: result.provider,
+        model: result.model,
+        text: result.text,
+        excerpt,
+        saved: false,
+      };
+    }
+    const submitted = this.submitOcr(jobId, result.text);
+    return {
+      job: submitted.job,
+      provider: result.provider,
+      model: result.model,
+      text: result.text,
+      excerpt,
+      saved: true,
+      chunk_count: submitted.chunk_count,
+    };
+  }
+
   private async indexPdfFile(
     relPath: string,
     absPath: string,
@@ -523,6 +584,21 @@ export class RagCorpus {
     }
   }
 
+  private async renderJobPage(job: OcrJob): Promise<{ mimeType: string; data: string }> {
+    if (this.ocrRender) {
+      return this.ocrRender();
+    }
+    const abs = resolveUnderRoot(this.dataDir, job.path);
+    if (!existsSync(abs)) {
+      throw new Error("ไม่มีไฟล์ PDF ต้นทาง — ไม่ส่งหน้าว่างออกค่าย OCR");
+    }
+    const rendered = await renderPdfPageJpeg(abs, job.page);
+    if (!rendered.ok) {
+      throw new Error(rendered.reason);
+    }
+    return { mimeType: rendered.mimeType, data: rendered.data };
+  }
+
   private getOcrJob(id: number): OcrJob | null {
     const row = this.db!.prepare(
       `SELECT id, path, page, status, char_count, excerpt, note, sidecar, updated_at
@@ -547,6 +623,8 @@ export class RagCorpus {
       ...counts,
       include_image: this.includeImage,
       min_chars: this.minChars,
+      provider: activeOcrProviderId(),
+      providers: listOcrProviders(),
     };
   }
 

@@ -186,6 +186,16 @@ function registerRagTools(server: McpServer, rag: BackendMcpClient): void {
     async (args) => rag.callTool("rag_get_ocr_page", args),
   );
   server.tool(
+    "rag_run_ocr",
+    "ส่งหน้างานที่ approve แล้วไปค่าย OCR ที่ตั้งไว้ (ค่าเริ่ม Typhoon) — ต้อง approve ก่อน ไม่ยิงทั้งคลัง",
+    {
+      job_id: z.number().int().positive(),
+      provider: z.string().min(1).optional(),
+      save: z.boolean().optional(),
+    },
+    async (args) => rag.callTool("rag_run_ocr", args),
+  );
+  server.tool(
     "rag_submit_ocr",
     "บันทึกข้อความ OCR เป็น sidecar (ไม่ทับ PDF) แล้วอินเด็กซ์หน้านี้ — ต้อง approve ก่อน",
     {

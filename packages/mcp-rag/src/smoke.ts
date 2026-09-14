@@ -2,6 +2,7 @@ import { RagCorpus } from "./corpus.js";
 import { pageNeedsOcr } from "./extract.js";
 import { fixtureIndexPath, writeFixtureCorpus } from "./fixture.js";
 import { SYNTHETIC_OCR_PDF } from "./ocr.js";
+import { parseOcrModelText, resolveTyphoonModel, runTyphoonOcr } from "./providers.js";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) {
@@ -14,11 +15,47 @@ async function main(): Promise<void> {
   assert(pageNeedsOcr("x".repeat(39), 40), "39 visible chars should need OCR at min 40");
   assert(!pageNeedsOcr("x".repeat(40), 40), "40 visible chars should not need OCR at min 40");
   assert(pageNeedsOcr("งบ\n\n  70", 40), "short Thai+digits page should need OCR");
+  assert(resolveTyphoonModel("openai/typhoon-ocr") === "typhoon-ocr", "alias openai/typhoon-ocr");
+  assert(resolveTyphoonModel("openai/typhoon-ocr-v1.5") === "typhoon-ocr", "alias v1.5");
+  assert(resolveTyphoonModel("typhoon-ocr-preview") === "typhoon-ocr-preview", "legacy preview id");
+  assert(
+    parseOcrModelText('{"natural_text":"หัวตาราง 1"}') === "หัวตาราง 1",
+    "unwrap Typhoon v1 natural_text JSON",
+  );
+
+  const mocked = await runTyphoonOcr(
+    { mimeType: "image/jpeg", data: "ZmFrZQ==" },
+    {
+      TYPHOON_API_KEY: "sk-test",
+      TYPHOON_API_BASE: "https://api.opentyphoon.ai/v1",
+      TYPHOON_OCR_MODEL: "openai/typhoon-ocr-v1.5",
+    },
+    (async (url, init) => {
+      if (String(url) !== "https://api.opentyphoon.ai/v1/chat/completions") {
+        throw new Error(`unexpected typhoon url ${String(url)}`);
+      }
+      const body = JSON.parse(String(init?.body)) as { model?: string };
+      if (body.model !== "typhoon-ocr") {
+        throw new Error(`expected mapped model typhoon-ocr, got ${body.model}`);
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: "MOCK-HTTP-OCR" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch,
+  );
+  assert(mocked.text === "MOCK-HTTP-OCR" && mocked.model === "typhoon-ocr", "typhoon HTTP mock");
 
   const dir = writeFixtureCorpus();
   const corpus = new RagCorpus("fixture", dir, fixtureIndexPath(dir), true, "smoke", {
     includeImage: false,
     minChars: 40,
+    ocrRender: async () => ({ mimeType: "image/jpeg", data: "ZmFrZQ==" }),
+    ocrRun: async (input) => ({
+      provider: input.provider || "typhoon",
+      model: "typhoon-ocr",
+      text: "ข้อความจากคนงานจำลอง\nMOCK-TYPHOON-TOKEN\nไม่ใช่เอกสารงบจริง",
+    }),
   });
   corpus.open();
   const status = await corpus.reindex();
@@ -74,6 +111,16 @@ async function main(): Promise<void> {
   }
 
   corpus.reviewOcrJob(job.id, "approve", "smoke");
+  let runBlocked = false;
+  try {
+    await corpus.runOcr(pending.find((row) => row.page === 2)?.id ?? job.id + 1);
+  } catch {
+    runBlocked = true;
+  }
+  if (!runBlocked) {
+    throw new Error("run_ocr must refuse pending jobs");
+  }
+
   const token = "OCR-FIXTURE-TOKEN-ALPHA";
   const submitted = corpus.submitOcr(
     job.id,
@@ -87,8 +134,21 @@ async function main(): Promise<void> {
     throw new Error(`search missed OCR sidecar: ${JSON.stringify(ocrHits)}`);
   }
 
+  const job2 = corpus.listOcrQueue("pending").find((row) => row.path === SYNTHETIC_OCR_PDF && row.page === 2);
+  if (!job2) {
+    throw new Error("missing page-2 OCR job for provider smoke");
+  }
+  corpus.reviewOcrJob(job2.id, "approve", "typhoon-mock");
+  const ran = await corpus.runOcr(job2.id, { provider: "typhoon", save: true });
+  if (!ran.saved || ran.provider !== "typhoon" || !ran.text.includes("MOCK-TYPHOON-TOKEN")) {
+    throw new Error(`run_ocr save failed: ${JSON.stringify({ ...ran, text: ran.excerpt })}`);
+  }
+  if (corpus.search("MOCK-TYPHOON-TOKEN").length < 1) {
+    throw new Error("run_ocr sidecar not searchable");
+  }
+
   const after = await corpus.reindex();
-  if (!after.ocr || after.ocr.done < 1 || after.ocr.pending < 1) {
+  if (!after.ocr || after.ocr.done < 2) {
     throw new Error(`reindex must keep done OCR jobs: ${JSON.stringify(after.ocr)}`);
   }
   if (after.file_count < status.file_count) {

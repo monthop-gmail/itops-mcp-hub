@@ -18,6 +18,14 @@ export interface RagStatus {
     done: number;
     include_image: boolean;
     min_chars: number;
+    provider: string;
+    providers: Array<{
+      id: string;
+      label: string;
+      ready: boolean;
+      model?: string;
+      api_base?: string;
+    }>;
   };
   note: string;
 }

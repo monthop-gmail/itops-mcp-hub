@@ -165,6 +165,36 @@ export function registerRagTools(server: McpServer, corpus: RagCorpus): void {
   );
 
   server.tool(
+    "rag_run_ocr",
+    "ส่งหน้างานที่ approve แล้วไปค่าย OCR ที่ตั้งไว้ (ค่าเริ่ม Typhoon) — ไม่ทับ PDF. save=true จึงเขียน sidecar. ค่าเริ่มไม่ยิงทั้งคลัง",
+    {
+      job_id: jobIdSchema,
+      provider: z.string().min(1).optional().describe("ค่าเริ่ม RAG_OCR_PROVIDER เช่น typhoon"),
+      save: z.boolean().optional().describe("true = บันทึก sidecar หลังได้ข้อความ"),
+    },
+    async (args) => {
+      try {
+        const result = await corpus.runOcr(args.job_id, {
+          provider: args.provider,
+          save: args.save === true,
+        });
+        return jsonResult({
+          ok: true,
+          provider: result.provider,
+          model: result.model,
+          saved: result.saved,
+          excerpt: result.excerpt,
+          text: result.text,
+          job: result.job,
+          chunk_count: result.chunk_count,
+        });
+      } catch (error) {
+        return errorResult(error instanceof Error ? error.message : String(error));
+      }
+    },
+  );
+
+  server.tool(
     "rag_submit_ocr",
     "บันทึกข้อความ OCR เป็น sidecar ใต้โฟลเดอร์อินเด็กซ์ (ไม่ทับ PDF ต้นทาง) แล้วอินเด็กซ์หน้านี้ — ต้อง approve ก่อน",
     {

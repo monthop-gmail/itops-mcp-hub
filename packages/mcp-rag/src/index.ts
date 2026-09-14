@@ -44,6 +44,8 @@ log("info", "starting RAG MCP server", {
   backend: optionalEnv("RAG_BACKEND", "fixture"),
   ocrIncludeImage: optionalEnv("RAG_OCR_INCLUDE_IMAGE", "false"),
   ocrMinChars: optionalEnv("RAG_OCR_MIN_CHARS", "40"),
+  ocrProvider: optionalEnv("RAG_OCR_PROVIDER", "typhoon"),
+  typhoonReady: Boolean(optionalEnv("TYPHOON_API_KEY") || optionalEnv("TYPHOON_OCR_API_KEY")),
 });
 
 serveMcpHttp(createServer, {

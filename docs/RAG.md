@@ -30,6 +30,7 @@
 | `rag_list_ocr_queue` | รายการงาน (ค่าเริ่ม pending) — ไม่มีภาพ |
 | `rag_review_ocr_job` | `approve` หรือ `reject` |
 | `rag_get_ocr_page` | metadata/excerpt; ภาพเฉพาะเมื่อเปิดธงและงานถูก approve |
+| `rag_run_ocr` | ส่งหน้าที่ approve แล้วไปค่าย OCR (ค่าเริ่ม Typhoon) — ไม่ยิงทั้งคลัง |
 | `rag_submit_ocr` | บันทึกข้อความเป็น sidecar แล้วอินเด็กซ์หน้านี้ — **ต้อง approve ก่อน** |
 
 ผลจาก fixture มี `sample: true`
@@ -48,13 +49,25 @@ ${RAG_HOST_INDEX_DIR}/ocr/<path>.p<หน้า>.ocr.md
 
 ตัวอย่าง: `/data/rag/ocr/งบประมาณ-2570/สำนักงบประมาณ/แบบสแกน.pdf.p3.ocr.md`
 
+คิวเดียวกันเรียกคนงานค่ายได้ทีละหน้าด้วย `rag_run_ocr` หลัง **approve** — ค่าเริ่ม Typhoon OCR 1.5 (`typhoon-ocr` ที่ `https://api.opentyphoon.ai/v1`). ไม่ยิงทั้งคลังอัตโนมัติ. `save=true` จึงเขียน sidecar
+
 คลาวด์ ChatGPT / Grok / Gemini **ดึงไฟล์ใน LAN ไม่ได้** — ถ้าต้องการให้โมเดลสายตาช่วยอ่าน ให้ตั้ง `RAG_OCR_INCLUDE_IMAGE=true` แล้วเรียก `rag_get_ocr_page` หลัง approve (JPEG จาก `pdftoppm` จำกัด ~1.5MB) ค่าเริ่ม `false`
 
-คิวเดียวกันสลับตัวทำงานทีหลังได้ (Typhoon OCR API / GPU ในไซต์ / Tesseract `tha+eng`) โดยไม่เปลี่ยนเลย์เอาต์ sidecar — รอบนี้เป็นคิว + ชั้นคัดกรอง ไม่ใช่คนงานแบตช์
-
-อย่าส่งคลัง 2570 ออก API สาธารณะจนกว่าแต่ละไซต์จะตัดสินใจเรื่อง egress
+อย่าส่งคลัง 2570 ทั้งก้อนออก API สาธารณะ — คัดกรองทีละหน้า
 
 Fixture ไม่มี PDF สแกนจริง — มีงานทดสอบ 2 หน้าที่ `งบประมาณ-2570/สำนักงบประมาณ/แบบสแกน-ปก.pdf` เพื่อให้เครื่องมือคิวทำงาน
+
+## ค่าย OCR
+
+ค่าเริ่ม `RAG_OCR_PROVIDER=typhoon`. คีย์อยู่ที่ `.env` ของไซต์ (`TYPHOON_API_KEY`) **ห้าม commit**
+
+| ค่า | ความหมาย |
+| --- | --- |
+| `TYPHOON_API_BASE` | ค่าเริ่ม `https://api.opentyphoon.ai/v1` |
+| `TYPHOON_OCR_MODEL` | ค่าเริ่ม `typhoon-ocr` (OCR 1.5). รับ alias `openai/typhoon-ocr` และ `openai/typhoon-ocr-v1.5` |
+| รุ่นเก่า | `typhoon-ocr-preview` (จะเลิก 31 ธ.ค. 2025) |
+
+ค่ายอื่นส่งคีย์มาทีหลัง ใส่ใน `.env` แล้วต่อ `RAG_OCR_PROVIDER=<id>` — เลย์เอาต์ sidecar / คิวไม่เปลี่ยน
 
 ## ตั้งค่า
 
@@ -68,6 +81,10 @@ RAG_HOST_DATA_DIR=/mnt/c/data/2570
 RAG_HOST_INDEX_DIR=./data/rag
 RAG_OCR_INCLUDE_IMAGE=false
 RAG_OCR_MIN_CHARS=40
+RAG_OCR_PROVIDER=typhoon
+TYPHOON_API_KEY=
+TYPHOON_API_BASE=https://api.opentyphoon.ai/v1
+TYPHOON_OCR_MODEL=typhoon-ocr
 ```
 
 แล้ว
@@ -83,5 +100,5 @@ docker compose up -d --build sub-mcp-rag mcp-hub-it mcp-hub-admin mcp-hub-accoun
 ## สิ่งที่ยังไม่ทำในรอบนี้
 
 - เวกเตอร์ embedding (BGE-M3 ฯลฯ) — เพิ่มเป็นชั้นที่ 2 เมื่อค้นคำพ้องที่ FTS5 ไม่จับ
-- คนงาน OCR อัตโนมัติ (Typhoon / Tesseract / GPU) — คิวพร้อมแล้ว ยังไม่ยิงออกเอง
+- คนงาน OCR อัตโนมัติทั้งคลัง / ค่ายอื่นนอกจาก Typhoon — คิว + Typhoon ทีละหน้าพร้อมแล้ว
 - แยก collection ตามบทบาท (ตอนนี้คลังเดียวกันทั้ง IT/admin/บัญชี เพราะเป็นเอกสารราชการชุดเดียวกันต่อไซต์)
