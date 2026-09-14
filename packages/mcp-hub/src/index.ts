@@ -26,16 +26,26 @@ const role = parseRole(optionalEnv("HUB_ROLE", "it"));
 const name = hubName(role);
 
 function parseAccountingProduct(raw: string): AccountingProduct {
-  return raw === "allinone" ? "allinone" : "express";
+  if (raw === "allinone") {
+    return "allinone";
+  }
+  if (raw === "odoo") {
+    return "odoo";
+  }
+  return "express";
 }
 
 const accountingProduct = parseAccountingProduct(optionalEnv("ACCOUNTING_PRODUCT", "express"));
+const odooAllowWrite = optionalEnv("ODOO_ALLOW_WRITE", "false").toLowerCase() === "true";
 
 function createBackends(): HubBackends {
   const rag = new BackendMcpClient("rag", requireEnv("RAG_MCP_URL"));
   if (role === "accounting") {
     if (accountingProduct === "allinone") {
       return { allinone: new BackendMcpClient("allinone", requireEnv("ALLINONE_MCP_URL")), rag };
+    }
+    if (accountingProduct === "odoo") {
+      return { odoo: new BackendMcpClient("odoo", requireEnv("ODOO_MCP_URL")), rag };
     }
     return { express: new BackendMcpClient("express", requireEnv("EXPRESS_MCP_URL")), rag };
   }
@@ -51,7 +61,7 @@ const backends = createBackends();
 
 function createServer(): McpServer {
   const server = new McpServer({ name, version: VERSION });
-  registerHubTools(server, backends, role, accountingProduct);
+  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite);
   return server;
 }
 
@@ -64,8 +74,10 @@ log("info", "starting MCP hub", {
   meshcentral: optionalEnv("MESHCENTRAL_MCP_URL"),
   express: optionalEnv("EXPRESS_MCP_URL"),
   allinone: optionalEnv("ALLINONE_MCP_URL"),
+  odoo: optionalEnv("ODOO_MCP_URL"),
   zktime: optionalEnv("ZKTIME_MCP_URL"),
   accountingProduct,
+  odooAllowWrite,
   rag: optionalEnv("RAG_MCP_URL"),
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),
 });

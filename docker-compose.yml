@@ -139,6 +139,8 @@ services:
         condition: service_healthy
       sub-mcp-allinone:
         condition: service_healthy
+      sub-mcp-odoo:
+        condition: service_healthy
       sub-mcp-rag:
         condition: service_healthy
     environment:
@@ -146,8 +148,10 @@ services:
       PORT: "3000"
       MCP_PUBLIC_BASE_PATH: /mcp/accounting
       ACCOUNTING_PRODUCT: ${ACCOUNTING_PRODUCT:-express}
+      ODOO_ALLOW_WRITE: ${ODOO_ALLOW_WRITE:-false}
       EXPRESS_MCP_URL: http://sub-mcp-express:3000
       ALLINONE_MCP_URL: http://sub-mcp-allinone:3000
+      ODOO_MCP_URL: http://sub-mcp-odoo:3000
       RAG_MCP_URL: http://sub-mcp-rag:3000
     expose:
       - "3000"
@@ -265,6 +269,33 @@ services:
       ZKTIME_MSSQL_ENCRYPT: ${ZKTIME_MSSQL_ENCRYPT:-false}
     volumes:
       - ${ZKTIME_HOST_DATA_DIR:-./data/zktime}:/data/zktime:ro
+    expose:
+      - "3000"
+
+  sub-mcp-odoo:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-odoo
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      PORT: "3000"
+      ODOO_BACKEND: ${ODOO_BACKEND:-fixture}
+      ODOO_ALLOW_WRITE: ${ODOO_ALLOW_WRITE:-false}
+      ODOO_URL: ${ODOO_URL:-}
+      ODOO_DB: ${ODOO_DB:-}
+      ODOO_USERNAME: ${ODOO_USERNAME:-}
+      ODOO_PASSWORD: ${ODOO_PASSWORD:-}
+      ODOO_SERVERS: ${ODOO_SERVERS:-}
+      ODOO_BLOCKED_MODELS: ${ODOO_BLOCKED_MODELS:-ir.*,res.users*,res.groups*}
+      BLOCKED_MODELS: ${ODOO_BLOCKED_MODELS:-ir.*,res.users*,res.groups*}
+      ODOO_ALLOWED_MODELS: ${ODOO_ALLOWED_MODELS:-}
+      ALLOWED_MODELS: ${ODOO_ALLOWED_MODELS:-}
     expose:
       - "3000"
 

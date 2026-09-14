@@ -16,7 +16,7 @@
 ACCOUNTING_PRODUCT=allinone
 ```
 
-ค่าเริ่มคือ `express` — kknang ไม่ต้องเปลี่ยน ฮับบัญชีจะโชว์เครื่องมือ `allinone_*` หรือ `express_*` ตามค่านี้ ไม่ปนกัน
+ค่าเริ่มคือ `express` — kknang ไม่ต้องเปลี่ยน ฮับบัญชีจะโชว์เครื่องมือ `allinone_*` หรือ `express_*` หรือ `odoo_*` ตาม `ACCOUNTING_PRODUCT` ไม่ปนกัน
 
 ไม่มี REST สาธารณะ อ่านอย่างเดียว ไม่มี `run_shell`
 

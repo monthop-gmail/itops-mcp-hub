@@ -1,11 +1,11 @@
 # ทีมทดลอง MCP บน ChatGPT / Grok (read-only)
 
-ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / ZKTime เข้า-ออกงาน / สมุดบัญชี (Express หรือ Allinone) / คลังเอกสาร ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
+ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / ZKTime เข้า-ออกงาน / สมุดบัญชี (Express / Allinone / Odoo) / คลังเอกสาร ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
 
 สรุปสั้น: **ลองได้** ถ้าต่อเส้นที่ตรงบทบาท (`/mcp/it/` หรือ `/mcp/accounting/`) และมี URL แบบ HTTPS ที่อินเทอร์เน็ตถึงได้  
 ยัง **ห้าม** ส่ง `ADMIN_TOKEN` หรือเปิด `meshcentral_run_shell`
 
-งาน IT กับสมุดบัญชี **คนละโทเคน คนละ URL** — ดู [EXPRESS.md](EXPRESS.md) หรือ [ALLINONE.md](ALLINONE.md)
+งาน IT กับสมุดบัญชี **คนละโทเคน คนละ URL** — ดู [EXPRESS.md](EXPRESS.md) [ALLINONE.md](ALLINONE.md) หรือ [ODOO.md](ODOO.md)
 
 ## สิ่งที่ทีมจะเห็น
 
@@ -22,7 +22,7 @@
 
 ถ้า AI เห็น `meshcentral_run_shell` แปลว่าต่อผิดเส้น — ถอดออกทันที
 
-ทีมบัญชีเห็น `express_*` หรือ `allinone_*` (ตาม `ACCOUNTING_PRODUCT` ของไซต์) บวกชุด `rag_*` เดียวกันบน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
+ทีมบัญชีเห็น `express_*` หรือ `allinone_*` หรือ `odoo_*` (ตาม `ACCOUNTING_PRODUCT` ของไซต์) บวกชุด `rag_*` เดียวกันบน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
 เอกสาร RAG ดู [RAG.md](RAG.md)  
 เข้า-ออกงาน ZKTime ดู [ZKTIME.md](ZKTIME.md) — รายงานสาธารณะแค่จำนวนแถว ห้าม dump รายชื่อพนักงาน
 
@@ -65,7 +65,7 @@ MCP URL: https://<hostname>/mcp/it/mcp
 อย่าใช้: /mcp/admin/ และ ADMIN_TOKEN
 ```
 
-สำหรับบัญชี (Express หรือ Allinone — URL เดียวกัน):
+สำหรับบัญชี (Express / Allinone / Odoo — URL เดียวกัน):
 
 ```
 MCP URL: https://<hostname>/mcp/accounting/mcp
@@ -200,7 +200,7 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 - อย่าเปิด Zabbix UI (`:9443`) หรือ MeshCentral (`:9444`) ออกอินเทอร์เน็ต เปิดเฉพาะ MCP gateway
 - อย่าใส่ token ใน URL (`?api_key=`) — โผล่ในล็อกพร็อกซี
 - อย่าใช้ `IT_TOKEN` กับ `/mcp/accounting/` และอย่าใช้ `ACCOUNTING_TOKEN` กับเส้น IT
-- ค่าเริ่มสมุดบัญชีเป็นข้อมูล **fixture** (`sample: true`) จนกว่าไซต์จะต่อ Express DBF/HTTP หรือ Allinone .mdb/MySQL
+- ค่าเริ่มสมุดบัญชีเป็นข้อมูล **fixture** (`sample: true`) จนกว่าไซต์จะต่อ Express DBF/HTTP, Allinone .mdb/MySQL หรือ Odoo `/jsonrpc`
 - ค่าเริ่ม ZKTime เป็น **fixture** จนกว่าไซต์จะต่อ `att2000.mdb` หรือ SQL Server
 
 ## เมื่อไหร่ต้องรอ ai-tools-mcp
@@ -209,7 +209,7 @@ Gemini ปฏิเสธ Bearer อย่างเดียว — ต้อง
 | --- | --- |
 | อ่านปัญหา / สถานะเครื่อง / inventory | ได้ หลังมี HTTPS + IT token |
 | ให้ทีม ChatGPT / Grok ช่วยดูไซต์ | ได้ บนเส้น IT |
-| อ่านลูกหนี้ / สินค้า / GL / ใบแจ้งหนี้ | ได้ บน `/mcp/accounting/mcp` (Express `express_*` หรือ Allinone `allinone_*`) |
+| อ่านลูกหนี้ / สินค้า / GL / ใบแจ้งหนี้ | ได้ บน `/mcp/accounting/mcp` (Express / Allinone / Odoo ตามไซต์) |
 | อ่านเข้า-ออกงาน ZKTime | ได้ บน `/mcp/it/mcp` (`zktime_*`, อ่านอย่างเดียว) |
 | สั่งคำสั่งบนเครื่องผ่าน MeshCentral | ยังไม่ได้ — รอ approval |
 | ลงรายการขายหรือแก้ไขสมุด | ไม่มีใน MCP นี้ — อ่านอย่างเดียว |

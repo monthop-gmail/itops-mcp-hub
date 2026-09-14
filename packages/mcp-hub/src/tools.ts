@@ -19,13 +19,14 @@ const expressQuery = z
 const expressLimit = z.number().int().min(1).max(200).optional().describe("จำนวนแถวสูงสุด ค่าเริ่ม 50");
 
 export type HubRole = "it" | "admin" | "accounting";
-export type AccountingProduct = "express" | "allinone";
+export type AccountingProduct = "express" | "allinone" | "odoo";
 
 export interface HubBackends {
   zabbix?: BackendMcpClient;
   meshcentral?: BackendMcpClient;
   express?: BackendMcpClient;
   allinone?: BackendMcpClient;
+  odoo?: BackendMcpClient;
   zktime?: BackendMcpClient;
   rag?: BackendMcpClient;
 }
@@ -35,10 +36,13 @@ export function registerHubTools(
   backends: HubBackends,
   role: HubRole,
   accountingProduct: AccountingProduct = "express",
+  odooAllowWrite = false,
 ): void {
   if (role === "accounting") {
     if (accountingProduct === "allinone") {
       registerAllinoneTools(server, requireBackend(backends.allinone, "allinone"));
+    } else if (accountingProduct === "odoo") {
+      registerOdooTools(server, requireBackend(backends.odoo, "odoo"), odooAllowWrite);
     } else {
       registerExpressTools(server, requireBackend(backends.express, "express"));
     }
@@ -292,5 +296,126 @@ function registerAllinoneTools(server: McpServer, allinone: BackendMcpClient): v
     "ผังบัญชีจากตาราง GLMST",
     { query: expressQuery, limit: expressLimit },
     async (args) => allinone.callTool("allinone_list_gl_accounts", args),
+  );
+}
+
+function registerOdooTools(server: McpServer, odoo: BackendMcpClient, allowWrite: boolean): void {
+  const Domain = z
+    .array(z.union([z.string(), z.array(z.any())]))
+    .optional()
+    .describe("Odoo search domain");
+  const Model = z.string().describe("Odoo model name (e.g. res.partner)");
+  const Ids = z.array(z.number().int());
+  const ServerName = z.string().optional().describe("Named server from ODOO_SERVERS");
+
+  server.tool("odoo_get_status", "สถานะการต่อ Odoo (fixture / jsonrpc)", {}, async () =>
+    odoo.callTool("odoo_get_status", {}),
+  );
+  server.tool("odoo_list_servers", "รายชื่อเซิร์ฟเวอร์ Odoo ที่ตั้งไว้", {}, async () =>
+    odoo.callTool("odoo_list_servers", {}),
+  );
+  server.tool(
+    "odoo_version",
+    "เวอร์ชัน Odoo",
+    { server: ServerName },
+    async (args) => odoo.callTool("odoo_version", args),
+  );
+  server.tool(
+    "odoo_context",
+    "ผู้ใช้ บริษัท timezone ภาษา — datetime ใน Odoo เป็น UTC",
+    { server: ServerName },
+    async (args) => odoo.callTool("odoo_context", args),
+  );
+  server.tool(
+    "odoo_get_models",
+    "รายชื่อโมเดลที่ใช้ได้ (ตัดที่โดน BLOCKED_MODELS)",
+    {
+      server: ServerName,
+      filter: z.string().optional(),
+      limit: z.number().int().optional(),
+    },
+    async (args) => odoo.callTool("odoo_get_models", args),
+  );
+  server.tool(
+    "odoo_fields_get",
+    "นิยามฟิลด์ของโมเดล",
+    { server: ServerName, model: Model, attributes: z.array(z.string()).optional() },
+    async (args) => odoo.callTool("odoo_fields_get", args),
+  );
+  server.tool(
+    "odoo_search_count",
+    "นับเรคอร์ดตามโดเมน",
+    { server: ServerName, model: Model, domain: Domain },
+    async (args) => odoo.callTool("odoo_search_count", args),
+  );
+  server.tool(
+    "odoo_search_read",
+    "ค้นแล้วอ่านเรคอร์ด (ค่าเริ่ม limit 50)",
+    {
+      server: ServerName,
+      model: Model,
+      domain: Domain,
+      fields: z.array(z.string()).optional(),
+      offset: z.number().int().optional(),
+      limit: z.number().int().optional(),
+      order: z.string().optional(),
+    },
+    async (args) => odoo.callTool("odoo_search_read", args),
+  );
+  server.tool(
+    "odoo_read",
+    "อ่านเรคอร์ดตาม id",
+    { server: ServerName, model: Model, ids: Ids, fields: z.array(z.string()).optional() },
+    async (args) => odoo.callTool("odoo_read", args),
+  );
+  server.tool(
+    "odoo_read_group",
+    "จัดกลุ่มแล้วรวมยอด — ถ้าถูกตัดจะมี has_more + total_records",
+    {
+      server: ServerName,
+      model: Model,
+      domain: Domain,
+      groupby: z.array(z.string()),
+      aggregates: z.array(z.string()).optional(),
+      limit: z.number().int().optional(),
+      offset: z.number().int().optional(),
+      order: z.string().optional(),
+    },
+    async (args) => odoo.callTool("odoo_read_group", args),
+  );
+
+  if (!allowWrite) {
+    return;
+  }
+
+  server.tool(
+    "odoo_create",
+    "สร้างเรคอร์ด (ต้องเปิด ODOO_ALLOW_WRITE) พร้อม fields_not_applied",
+    { server: ServerName, model: Model, values: z.record(z.any()) },
+    async (args) => odoo.callTool("odoo_create", args),
+  );
+  server.tool(
+    "odoo_write",
+    "แก้เรคอร์ด (ต้องเปิด ODOO_ALLOW_WRITE) พร้อม fields_not_applied",
+    { server: ServerName, model: Model, ids: Ids, values: z.record(z.any()) },
+    async (args) => odoo.callTool("odoo_write", args),
+  );
+  server.tool(
+    "odoo_delete",
+    "ลบเรคอร์ด (ต้องเปิด ODOO_ALLOW_WRITE)",
+    { server: ServerName, model: Model, ids: Ids },
+    async (args) => odoo.callTool("odoo_delete", args),
+  );
+  server.tool(
+    "odoo_execute",
+    "เรียก public method ใดก็ได้ (ต้องเปิด ODOO_ALLOW_WRITE)",
+    {
+      server: ServerName,
+      model: Model,
+      method: z.string(),
+      args: z.array(z.any()).optional(),
+      kwargs: z.record(z.any()).optional(),
+    },
+    async (args) => odoo.callTool("odoo_execute", args),
   );
 }
