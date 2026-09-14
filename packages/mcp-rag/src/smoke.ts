@@ -1,8 +1,7 @@
 import { RagCorpus } from "./corpus.js";
 import { pageNeedsOcr } from "./extract.js";
-import { writeFixtureCorpus } from "./fixture.js";
+import { fixtureIndexPath, writeFixtureCorpus } from "./fixture.js";
 import { SYNTHETIC_OCR_PDF } from "./ocr.js";
-import { join } from "node:path";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) {
@@ -17,7 +16,7 @@ async function main(): Promise<void> {
   assert(pageNeedsOcr("งบ\n\n  70", 40), "short Thai+digits page should need OCR");
 
   const dir = writeFixtureCorpus();
-  const corpus = new RagCorpus("fixture", dir, join(dir, "index.sqlite"), true, "smoke", {
+  const corpus = new RagCorpus("fixture", dir, fixtureIndexPath(dir), true, "smoke", {
     includeImage: false,
     minChars: 40,
   });
@@ -91,6 +90,16 @@ async function main(): Promise<void> {
   const after = await corpus.reindex();
   if (!after.ocr || after.ocr.done < 1 || after.ocr.pending < 1) {
     throw new Error(`reindex must keep done OCR jobs: ${JSON.stringify(after.ocr)}`);
+  }
+  if (after.file_count < status.file_count) {
+    throw new Error(`reindex dropped sources: ${after.file_count} vs ${status.file_count}`);
+  }
+  const leaked = corpus.listSources(200).some((row) => row.path.includes(".ocr.md") || row.path.startsWith("ocr/"));
+  if (leaked) {
+    throw new Error("OCR sidecar leaked into source list");
+  }
+  if (!corpus.listSources(200).some((row) => row.path === SYNTHETIC_OCR_PDF)) {
+    throw new Error("submitted OCR PDF path missing from sources");
   }
   const still = corpus.search(token);
   if (still.length < 1) {

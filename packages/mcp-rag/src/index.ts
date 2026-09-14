@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { log, optionalEnv, serveMcpHttp } from "@itops/mcp-common";
 import { RagCorpus } from "./corpus.js";
-import { FIXTURE_NOTE, writeFixtureCorpus } from "./fixture.js";
+import { FIXTURE_NOTE, fixtureIndexPath, writeFixtureCorpus } from "./fixture.js";
 import { registerRagTools } from "./tools.js";
 
 const NAME = "sub-mcp-rag";
@@ -25,7 +25,7 @@ function createCorpus(): RagCorpus {
     );
   }
   const dataDir = writeFixtureCorpus();
-  const indexPath = join(dataDir, "index.sqlite");
+  const indexPath = fixtureIndexPath(dataDir);
   return new RagCorpus("fixture", dataDir, indexPath, true, FIXTURE_NOTE);
 }
 

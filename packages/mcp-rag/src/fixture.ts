@@ -7,12 +7,14 @@ const NOTE =
 
 export const FIXTURE_NOTE = NOTE;
 
+/** Writes sample docs under `<root>/docs` and returns that docs path. Index/OCR live beside it, not inside it. */
 export function writeFixtureCorpus(dir?: string): string {
   const root = dir ?? join(tmpdir(), `itops-rag-fixture-${process.pid}`);
-  mkdirSync(join(root, "งบประมาณ-2570", "สำนักงบประมาณ"), { recursive: true });
-  mkdirSync(join(root, "งบประมาณ-2570", "กระทรวงมหาดไทย"), { recursive: true });
+  const docs = join(root, "docs");
+  mkdirSync(join(docs, "งบประมาณ-2570", "สำนักงบประมาณ"), { recursive: true });
+  mkdirSync(join(docs, "งบประมาณ-2570", "กระทรวงมหาดไทย"), { recursive: true });
   writeFileSync(
-    join(root, "งบประมาณ-2570", "สำนักงบประมาณ", "คำแถลงงบประมาณ-2570.md"),
+    join(docs, "งบประมาณ-2570", "สำนักงบประมาณ", "คำแถลงงบประมาณ-2570.md"),
     `# คำแถลงงบประมาณรายจ่ายประจำปีงบประมาณ พ.ศ. 2570 (ตัวอย่าง)
 
 เอกสารชุดนี้เป็น **fixture** สำหรับทดสอบ RAG ของ IT Operations Hub ไม่ใช่ไฟล์จาก
@@ -26,7 +28,7 @@ https://www.parliament.go.th/
     "utf8",
   );
   writeFileSync(
-    join(root, "งบประมาณ-2570", "กระทรวงมหาดไทย", "ผลผลิต-ระบบสารสนเทศ.md"),
+    join(docs, "งบประมาณ-2570", "กระทรวงมหาดไทย", "ผลผลิต-ระบบสารสนเทศ.md"),
     `# ผลผลิต : พัฒนาระบบสารสนเทศท้องถิ่น ปี 2570 (ตัวอย่าง)
 
 รหัสแผนงาน 1100  รหัสผลผลิต 1100-IT-01
@@ -38,7 +40,7 @@ https://www.parliament.go.th/
     "utf8",
   );
   writeFileSync(
-    join(root, "งบประมาณ-2570", "กระทรวงมหาดไทย", "งบลงทุน-ครุภัณฑ์คอมพิวเตอร์.md"),
+    join(docs, "งบประมาณ-2570", "กระทรวงมหาดไทย", "งบลงทุน-ครุภัณฑ์คอมพิวเตอร์.md"),
     `# งบลงทุนครุภัณฑ์คอมพิวเตอร์ ปี 2570 (ตัวอย่าง)
 
 รายการ: เครื่องแม่ข่ายสำรอง 2 ชุด สำหรับเกตเวย์ MCP ประจำพื้นที่
@@ -48,5 +50,9 @@ https://www.parliament.go.th/
 `,
     "utf8",
   );
-  return root;
+  return docs;
+}
+
+export function fixtureIndexPath(dataDir: string): string {
+  return join(dataDir, "..", "index.sqlite");
 }

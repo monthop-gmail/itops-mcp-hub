@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
 import type { Database as SqliteDatabase } from "better-sqlite3";
 import { log } from "@itops/mcp-common";
@@ -150,7 +150,7 @@ export class RagCorpus {
       this.db!.exec("DELETE FROM chunks;");
       this.db!.exec("DROP TABLE IF EXISTS chunks_fts;");
       this.db!.exec(FTS_DDL);
-      const files = walkFiles(this.dataDir);
+      const files = walkFiles(this.dataDir).filter((file) => !this.isIndexArtifact(file.absPath));
       log("info", "RAG indexing start", {
         backend: this.backend,
         files: files.length,
@@ -609,6 +609,19 @@ export class RagCorpus {
       rank: number;
     }>;
     return rows.map((row) => toHit(row, query));
+  }
+
+  private isIndexArtifact(absPath: string): boolean {
+    const abs = resolve(absPath);
+    const ocrRoot = resolve(this.ocrDir);
+    if (abs === ocrRoot || abs.startsWith(`${ocrRoot}/`)) {
+      return true;
+    }
+    const indexAbs = resolve(this.indexPath);
+    if (abs === indexAbs || abs.startsWith(`${indexAbs}-`)) {
+      return true;
+    }
+    return abs.endsWith(".ocr.md");
   }
 
   private requireDb(): void {
