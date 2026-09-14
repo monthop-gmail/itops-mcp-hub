@@ -85,6 +85,8 @@ services:
         condition: service_healthy
       sub-mcp-zktime:
         condition: service_healthy
+      sub-mcp-pstack:
+        condition: service_healthy
     environment:
       HUB_ROLE: it
       PORT: "3000"
@@ -92,6 +94,7 @@ services:
       ZABBIX_MCP_URL: http://sub-mcp-zabbix:3000
       MESHCENTRAL_MCP_URL: http://sub-mcp-meshcentral:3000
       ZKTIME_MCP_URL: http://sub-mcp-zktime:3000
+      PSTACK_MCP_URL: http://sub-mcp-pstack:3000
       RAG_MCP_URL: http://sub-mcp-rag:3000
     expose:
       - "3000"
@@ -114,6 +117,8 @@ services:
         condition: service_healthy
       sub-mcp-zktime:
         condition: service_healthy
+      sub-mcp-pstack:
+        condition: service_healthy
     environment:
       HUB_ROLE: admin
       PORT: "3000"
@@ -121,6 +126,7 @@ services:
       ZABBIX_MCP_URL: http://sub-mcp-zabbix:3000
       MESHCENTRAL_MCP_URL: http://sub-mcp-meshcentral:3000
       ZKTIME_MCP_URL: http://sub-mcp-zktime:3000
+      PSTACK_MCP_URL: http://sub-mcp-pstack:3000
       RAG_MCP_URL: http://sub-mcp-rag:3000
     expose:
       - "3000"
@@ -296,6 +302,28 @@ services:
       BLOCKED_MODELS: ${ODOO_BLOCKED_MODELS:-ir.*,res.users*,res.groups*}
       ODOO_ALLOWED_MODELS: ${ODOO_ALLOWED_MODELS:-}
       ALLOWED_MODELS: ${ODOO_ALLOWED_MODELS:-}
+    expose:
+      - "3000"
+
+  sub-mcp-pstack:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-pstack
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      PORT: "3000"
+      PSTACK_BACKEND: ${PSTACK_BACKEND:-fixture}
+      PSTACK_URL: ${PSTACK_URL:-}
+      PSTACK_API_KEY: ${PSTACK_API_KEY:-}
+      PSTACK_TENANT_ID: ${PSTACK_TENANT_ID:-}
+      PSTACK_ALLOWED_TOOLS: ${PSTACK_ALLOWED_TOOLS:-}
+      PSTACK_BLOCKED_TOOLS: ${PSTACK_BLOCKED_TOOLS:-}
     expose:
       - "3000"
 

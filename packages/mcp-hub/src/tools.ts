@@ -28,6 +28,7 @@ export interface HubBackends {
   allinone?: BackendMcpClient;
   odoo?: BackendMcpClient;
   zktime?: BackendMcpClient;
+  pstack?: BackendMcpClient;
   rag?: BackendMcpClient;
 }
 
@@ -53,6 +54,7 @@ export function registerHubTools(
   const zabbix = requireBackend(backends.zabbix, "zabbix");
   const meshcentral = requireBackend(backends.meshcentral, "meshcentral");
   const zktime = requireBackend(backends.zktime, "zktime");
+  const pstack = requireBackend(backends.pstack, "pstack");
 
   server.tool(
     "zabbix_get_active_problems",
@@ -88,6 +90,7 @@ export function registerHubTools(
   );
 
   registerZktimeTools(server, zktime);
+  registerPstackTools(server, pstack);
   registerRagTools(server, requireBackend(backends.rag, "rag"));
 
   if (role !== "admin") {
@@ -247,6 +250,31 @@ function registerZktimeTools(server: McpServer, zktime: BackendMcpClient): void 
     "เครื่องสแกนจากตาราง Machines (ไม่มีรหัสสื่อสาร CommPassword)",
     { query, limit },
     async (args) => zktime.callTool("zktime_list_devices", args),
+  );
+}
+
+function registerPstackTools(server: McpServer, pstack: BackendMcpClient): void {
+  server.tool(
+    "pstack_get_status",
+    "สถานะการต่อ pstack (fixture หรือ POST /mcp ของอินสแตนซ์จริง — ไม่ใช่เอเจนต์ในตัว)",
+    {},
+    async () => pstack.callTool("pstack_get_status", {}),
+  );
+  server.tool(
+    "pstack_list_tools",
+    "รายการ tool ที่ API key บน pstack ใช้ได้ โมดูลใหม่โผล่เอง",
+    { query: z.string().min(1).optional() },
+    async (args) => pstack.callTool("pstack_list_tools", args),
+  );
+  server.tool(
+    "pstack_call_tool",
+    "เรียก tool ของ pstack ตามชื่อจาก pstack_list_tools",
+    {
+      name: z.string().min(1),
+      arguments: z.record(z.any()).optional(),
+      tenant_id: z.string().min(1).optional(),
+    },
+    async (args) => pstack.callTool("pstack_call_tool", args),
   );
 }
 

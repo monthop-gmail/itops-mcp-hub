@@ -53,6 +53,7 @@ function createBackends(): HubBackends {
     zabbix: new BackendMcpClient("zabbix", requireEnv("ZABBIX_MCP_URL")),
     meshcentral: new BackendMcpClient("meshcentral", requireEnv("MESHCENTRAL_MCP_URL")),
     zktime: new BackendMcpClient("zktime", requireEnv("ZKTIME_MCP_URL")),
+    pstack: new BackendMcpClient("pstack", requireEnv("PSTACK_MCP_URL")),
     rag,
   };
 }
@@ -76,6 +77,7 @@ log("info", "starting MCP hub", {
   allinone: optionalEnv("ALLINONE_MCP_URL"),
   odoo: optionalEnv("ODOO_MCP_URL"),
   zktime: optionalEnv("ZKTIME_MCP_URL"),
+  pstack: optionalEnv("PSTACK_MCP_URL"),
   accountingProduct,
   odooAllowWrite,
   rag: optionalEnv("RAG_MCP_URL"),

@@ -1,6 +1,6 @@
 # ทีมทดลอง MCP บน ChatGPT / Grok (read-only)
 
-ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / ZKTime เข้า-ออกงาน / สมุดบัญชี (Express / Allinone / Odoo) / คลังเอกสาร ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
+ใช้เอกสารนี้ตอนส่งให้ทีมลองคุยกับ Zabbix / MeshCentral / ZKTime / pstack / สมุดบัญชี (Express / Allinone / Odoo) / คลังเอกสาร ผ่าน AI **ระหว่างรอ ai-tools-mcp** (ชั้นอนุมัติคำสั่ง privileged)
 
 สรุปสั้น: **ลองได้** ถ้าต่อเส้นที่ตรงบทบาท (`/mcp/it/` หรือ `/mcp/accounting/`) และมี URL แบบ HTTPS ที่อินเทอร์เน็ตถึงได้  
 ยัง **ห้าม** ส่ง `ADMIN_TOKEN` หรือเปิด `meshcentral_run_shell`
@@ -18,13 +18,15 @@
 | `zabbix_get_metrics` | ค่า item ของโฮสต์ |
 | `meshcentral_get_inventory` | รายการเครื่องใน MeshCentral |
 | `zktime_get_status` / `zktime_list_punches` | เข้า-ออกงาน ZKTime 5 (fixture จนกว่าไซต์จะต่อ `att2000.mdb`) |
+| `pstack_list_tools` / `pstack_call_tool` | เครื่องมือของอินสแตนซ์ pstack (ไม่ใช่เอเจนต์ในตัว) |
 | `rag_search` / `rag_list_sources` | เอกสารงบ/ราชการของไซต์ (path คือโครงสร้าง) |
 
 ถ้า AI เห็น `meshcentral_run_shell` แปลว่าต่อผิดเส้น — ถอดออกทันที
 
 ทีมบัญชีเห็น `express_*` หรือ `allinone_*` หรือ `odoo_*` (ตาม `ACCOUNTING_PRODUCT` ของไซต์) บวกชุด `rag_*` เดียวกันบน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
 เอกสาร RAG ดู [RAG.md](RAG.md)  
-เข้า-ออกงาน ZKTime ดู [ZKTIME.md](ZKTIME.md) — รายงานสาธารณะแค่จำนวนแถว ห้าม dump รายชื่อพนักงาน
+เข้า-ออกงาน ZKTime ดู [ZKTIME.md](ZKTIME.md) — รายงานสาธารณะแค่จำนวนแถว ห้าม dump รายชื่อพนักงาน  
+pstack ดู [PSTACK.md](PSTACK.md)
 
 ## สิ่งที่ยังใช้ไม่ได้จนกว่าจะมี tunnel
 

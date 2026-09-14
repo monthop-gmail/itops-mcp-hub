@@ -2,7 +2,7 @@
   "name": "itops-mcp-hub",
   "private": true,
   "version": "1.0.0",
-  "description": "Centralized IT Operations Hub with MCP gateway, Zabbix, MeshCentral, Express/Allinone/Odoo, ZKTime attendance, and document RAG",
+  "description": "Centralized IT Operations Hub with MCP gateway, Zabbix, MeshCentral, Express/Allinone/Odoo, ZKTime, pstack, and document RAG",
   "workspaces": [
     "packages/mcp-common",
     "packages/mcp-zabbix",
@@ -11,13 +11,14 @@
     "packages/mcp-allinone",
     "packages/mcp-zktime",
     "packages/mcp-odoo",
+    "packages/mcp-pstack",
     "packages/mcp-rag",
     "packages/mcp-hub",
     "packages/mcp-oauth"
   ],
   "scripts": {
-    "build": "npm run build -w @itops/mcp-common && npm run build -w @itops/mcp-zabbix && npm run build -w @itops/mcp-meshcentral && npm run build -w @itops/mcp-express && npm run build -w @itops/mcp-allinone && npm run build -w @itops/mcp-zktime && npm run build -w @itops/mcp-odoo && npm run build -w @itops/mcp-rag && npm run build -w @itops/mcp-hub && npm run build -w @itops/mcp-oauth",
-    "smoke": "npm run smoke -w @itops/mcp-express && npm run smoke -w @itops/mcp-allinone && npm run smoke -w @itops/mcp-zktime && npm run smoke -w @itops/mcp-odoo && npm run smoke -w @itops/mcp-rag && npm run smoke -w @itops/mcp-oauth",
+    "build": "npm run build -w @itops/mcp-common && npm run build -w @itops/mcp-zabbix && npm run build -w @itops/mcp-meshcentral && npm run build -w @itops/mcp-express && npm run build -w @itops/mcp-allinone && npm run build -w @itops/mcp-zktime && npm run build -w @itops/mcp-odoo && npm run build -w @itops/mcp-pstack && npm run build -w @itops/mcp-rag && npm run build -w @itops/mcp-hub && npm run build -w @itops/mcp-oauth",
+    "smoke": "npm run smoke -w @itops/mcp-express && npm run smoke -w @itops/mcp-allinone && npm run smoke -w @itops/mcp-zktime && npm run smoke -w @itops/mcp-odoo && npm run smoke -w @itops/mcp-pstack && npm run smoke -w @itops/mcp-rag && npm run smoke -w @itops/mcp-oauth",
     "typecheck": "npm run build"
   },
   "engines": {
