@@ -8,7 +8,7 @@ x-logging: &default-logging
 
 services:
   cloudflared:
-    image: cloudflare/cloudflared:2025.8.1
+    image: cloudflare/cloudflared:2026.9.1
     profiles: ["tunnel"]
     restart: unless-stopped
     logging: *default-logging

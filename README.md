@@ -129,7 +129,12 @@ Gateway status page (LAN): `http://<compose-host>:9080/`
 docker compose --profile tunnel up -d
 ```
 
-`cloudflared` is distroless and expects a real `CLOUDFLARE_TUNNEL_TOKEN`. Do not start this profile until the token is set.
+`cloudflared` is distroless and expects a real `CLOUDFLARE_TUNNEL_TOKEN`. Do not start this profile until the token is set. Image pin is `cloudflare/cloudflared:2026.9.1` — after pulling a newer compose file, recreate only that service:
+
+```bash
+docker compose --profile tunnel pull cloudflared
+docker compose --profile tunnel up -d cloudflared
+```
 
 ## First-run: Zabbix API token
 
