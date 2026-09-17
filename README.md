@@ -4,7 +4,7 @@
 
 A production Docker Compose stack:
 
-`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR) → mcp-hub-it | mcp-hub-admin | mcp-hub-accounting → sub-mcp-zabbix | sub-mcp-meshcentral | sub-mcp-express | sub-mcp-allinone | sub-mcp-odoo | sub-mcp-zktime | sub-mcp-pstack | sub-mcp-rag`
+`Cloudflare Tunnel → Nginx (Bearer RBAC + OAuth DCR) → mcp-hub-it | mcp-hub-admin | mcp-hub-accounting → sub-mcp-zabbix | sub-mcp-meshcentral | sub-mcp-express | sub-mcp-allinone | sub-mcp-odoo | sub-mcp-zktime | sub-mcp-pstack | sub-mcp-rag | sub-mcp-host`
 
 All services share a single bridge network, `infra-net`. MCP hubs and databases are not published on the host. Only LAN/VPN ports for the gateway, Zabbix, and MeshCentral agents are bound.
 
@@ -24,7 +24,7 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
   Bearer ACCOUNTING_TOKEN  → role accounting  → /mcp/accounting/*  (accounting only)
         |
         +--> mcp-hub-it:3000           Zabbix + MeshCentral inventory + ZKTime + pstack + RAG
-        +--> mcp-hub-admin:3000        same + meshcentral_run_shell + RAG
+        +--> mcp-hub-admin:3000        same + meshcentral_run_shell + RAG + host_* (เมื่อ HOST_ENABLED)
         +--> mcp-hub-accounting:3000   Express / Allinone / Odoo อ่านอย่างเดียว + RAG
                     |
                     +--> sub-mcp-zabbix / sub-mcp-meshcentral
@@ -34,6 +34,7 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
                     +--> sub-mcp-zktime    fixture | att2000.mdb | SQL Server
                     +--> sub-mcp-pstack    fixture | pstack POST /mcp
                     +--> sub-mcp-rag       โฟลเดอร์เอกสารไซต์ (งบ 2570 ฯลฯ)
+                    +--> sub-mcp-host      ไฟล์ใต้ mount :ro (ค่าเริ่มไม่ลงเครื่องมือบนฮับ)
                               |
                               +--> zabbix-web / zabbix-server / zabbix-db
                               +--> meshcentral
@@ -67,8 +68,9 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
 | `rag_get_ocr_page(job_id)` | yes | yes | yes |
 | `rag_run_ocr(job_id, provider?, save?)` | yes | yes | yes |
 | `rag_submit_ocr(job_id, text)` | yes | yes | yes |
+| `host_get_status()` / `host_list` / `host_stat` / `host_read` / `host_search` | no | yes เมื่อ `HOST_ENABLED=true` | no |
 
-Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only by default; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md), Odoo = [docs/ODOO.md](docs/ODOO.md) (write tools stay hidden until `ODOO_ALLOW_WRITE=true`). Attendance (ZKTime 5) is on the IT/admin hubs; see [docs/ZKTIME.md](docs/ZKTIME.md). pstack apps on the same hubs; see [docs/PSTACK.md](docs/PSTACK.md). Document RAG does not require a fourth connector URL; scanned pages go through an OCR queue (approve before text/images leave the site). See [docs/RAG.md](docs/RAG.md). A Desktop Commander–style host file/shell MCP is **not shipped** — study and first-slice design live in [docs/HOST.md](docs/HOST.md) (own admin-only sub-mcp, default off; do not vendor the upstream package).
+Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only by default; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md), Odoo = [docs/ODOO.md](docs/ODOO.md) (write tools stay hidden until `ODOO_ALLOW_WRITE=true`). Attendance (ZKTime 5) is on the IT/admin hubs; see [docs/ZKTIME.md](docs/ZKTIME.md). pstack apps on the same hubs; see [docs/PSTACK.md](docs/PSTACK.md). Document RAG does not require a fourth connector URL; scanned pages go through an OCR queue (approve before text/images leave the site). See [docs/RAG.md](docs/RAG.md). Host file tools (`host_*`) are admin-only, **off by default**, read-only under Docker mounts, and are not Desktop Commander — see [docs/HOST.md](docs/HOST.md).
 
 ## Requirements
 
@@ -338,6 +340,7 @@ packages/
   mcp-pstack/             # bridge to pstack POST /mcp (no embedded platform)
   mcp-zktime/             # ZKTime 5 attendance (fixture / att2000.mdb / SQL Server)
   mcp-rag/                # local document RAG (budget / government files)
+  mcp-host/               # read-only host files for admin (default off)
   mcp-hub/                # aggregator; HUB_ROLE=it|admin|accounting
   mcp-oauth/              # OAuth 2.1 + DCR; /authorize asks for site token
 scripts/create-zabbix-api-token.mjs
@@ -350,7 +353,7 @@ docs/ODOO.md              # Odoo JSON-RPC for ICB / NST (not MTR)
 docs/PSTACK.md            # pstack POST /mcp bridge (tools, not the inner agent)
 docs/ZKTIME.md            # ZKTime 5 attendance (Access / SQL Server)
 docs/RAG.md               # local document RAG + OCR queue
-docs/HOST.md              # study: host file MCP (not implemented)
+docs/HOST.md              # admin host file MCP (read-only, default off)
 ```
 
 ## Operations notes
@@ -358,6 +361,7 @@ docs/HOST.md              # study: host file MCP (not implemented)
 - Rotate `IT_TOKEN` / `ADMIN_TOKEN` / `ACCOUNTING_TOKEN` by changing `.env` and `docker compose up -d --force-recreate nginx mcp-oauth`.
 - Do not publish `mcp-hub-*`, `sub-mcp-*`, or `zabbix-db` to the internet.
 - `meshcentral_run_shell` runs as SYSTEM/root (`runAsUser: 0`) on the agent. Treat `ADMIN_TOKEN` like production break-glass.
+- `host_*` stays off until `HOST_ENABLED=true`. Even then it is read-only and jailed to mounted folders — not a host shell.
 - After changing MeshCentral hostname or published HTTPS port, update `config.json` in the `meshcentral-data` volume (`aliasPort` / `cert`) so agent download URLs stay correct.
 - Logs are JSON lines from the Node services and json-file rotated at 10 MB × 3.
 

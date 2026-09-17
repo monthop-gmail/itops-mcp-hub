@@ -38,6 +38,13 @@ function parseAccountingProduct(raw: string): AccountingProduct {
 const accountingProduct = parseAccountingProduct(optionalEnv("ACCOUNTING_PRODUCT", "express"));
 const odooAllowWrite = optionalEnv("ODOO_ALLOW_WRITE", "false").toLowerCase() === "true";
 
+function envFlag(name: string, fallback = false): boolean {
+  const raw = optionalEnv(name, fallback ? "true" : "false").toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+const hostEnabled = role === "admin" && envFlag("HOST_ENABLED", false);
+
 function createBackends(): HubBackends {
   const rag = new BackendMcpClient("rag", requireEnv("RAG_MCP_URL"));
   if (role === "accounting") {
@@ -49,20 +56,24 @@ function createBackends(): HubBackends {
     }
     return { express: new BackendMcpClient("express", requireEnv("EXPRESS_MCP_URL")), rag };
   }
-  return {
+  const backends: HubBackends = {
     zabbix: new BackendMcpClient("zabbix", requireEnv("ZABBIX_MCP_URL")),
     meshcentral: new BackendMcpClient("meshcentral", requireEnv("MESHCENTRAL_MCP_URL")),
     zktime: new BackendMcpClient("zktime", requireEnv("ZKTIME_MCP_URL")),
     pstack: new BackendMcpClient("pstack", requireEnv("PSTACK_MCP_URL")),
     rag,
   };
+  if (hostEnabled) {
+    backends.host = new BackendMcpClient("host", requireEnv("HOST_MCP_URL"));
+  }
+  return backends;
 }
 
 const backends = createBackends();
 
 function createServer(): McpServer {
   const server = new McpServer({ name, version: VERSION });
-  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite);
+  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite, hostEnabled);
   return server;
 }
 
@@ -81,6 +92,8 @@ log("info", "starting MCP hub", {
   accountingProduct,
   odooAllowWrite,
   rag: optionalEnv("RAG_MCP_URL"),
+  hostEnabled,
+  host: optionalEnv("HOST_MCP_URL"),
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),
 });
 

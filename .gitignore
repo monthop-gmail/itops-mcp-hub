@@ -20,6 +20,10 @@ data/docs/**
 !data/docs/README.md
 data/rag/**
 !data/rag/README.md
+data/host/**
+!data/host/README.md
+data/host-audit/**
+!data/host-audit/README.md
 *.sqlite
 agent-tools/
 terminals/

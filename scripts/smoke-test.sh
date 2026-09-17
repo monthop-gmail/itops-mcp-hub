@@ -204,6 +204,54 @@ http_check "ACCOUNTING initialize" "200" "\"name\":\"mcp-hub-accounting\"" \
   -X POST "${ACCOUNTING_URL}/mcp" \
   --data "$INIT_BODY"
 
+echo
+echo "== Host tools stay off unless HOST_ENABLED =="
+
+mcp_tool_names() {
+  local token="$1"
+  local url="$2"
+  local headers="$TMP_DIR/mcp_tools.headers"
+  local body="$TMP_DIR/mcp_tools.body"
+  local sid
+  curl -sS -o "$body" -D "$headers" \
+    -H "Authorization: Bearer $token" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -X POST "${url}/mcp" \
+    --data "$INIT_BODY" >/dev/null || true
+  sid="$(awk -F': ' 'tolower($1)=="mcp-session-id" { gsub(/\r/,"",$2); print $2; exit }' "$headers")"
+  if [ -z "$sid" ]; then
+    echo ""
+    return
+  fi
+  curl -sS \
+    -H "Authorization: Bearer $token" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -H "mcp-session-id: $sid" \
+    -X POST "${url}/mcp" \
+    --data '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+}
+
+assert_no_host_tools() {
+  local name="$1"
+  local raw="$2"
+  if printf '%s' "$raw" | grep -q 'host_'; then
+    fail "$name tools/list must not include host_* while HOST_ENABLED is off"
+  else
+    pass "$name tools/list has no host_* (HOST_ENABLED default off)"
+  fi
+}
+
+HOST_FLAG="$(printf '%s' "${HOST_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')"
+if [ "$HOST_FLAG" = "true" ] || [ "$HOST_FLAG" = "1" ] || [ "$HOST_FLAG" = "yes" ]; then
+  pass "HOST_ENABLED is on — skip default-off host_* assertion"
+else
+  assert_no_host_tools "IT" "$(mcp_tool_names "$IT_TOKEN" "$IT_URL")"
+  assert_no_host_tools "ADMIN" "$(mcp_tool_names "$ADMIN_TOKEN" "$ADMIN_URL")"
+  assert_no_host_tools "ACCOUNTING" "$(mcp_tool_names "$ACCOUNTING_TOKEN" "$ACCOUNTING_URL")"
+fi
+
 SSE_HEADERS="$TMP_DIR/it_sse.headers"
 SSE_BODY="$TMP_DIR/it_sse.body"
 curl -sS -N --max-time 5 \

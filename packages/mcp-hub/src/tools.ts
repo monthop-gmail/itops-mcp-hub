@@ -30,6 +30,7 @@ export interface HubBackends {
   zktime?: BackendMcpClient;
   pstack?: BackendMcpClient;
   rag?: BackendMcpClient;
+  host?: BackendMcpClient;
 }
 
 export function registerHubTools(
@@ -38,6 +39,7 @@ export function registerHubTools(
   role: HubRole,
   accountingProduct: AccountingProduct = "express",
   odooAllowWrite = false,
+  hostEnabled = false,
 ): void {
   if (role === "accounting") {
     if (accountingProduct === "allinone") {
@@ -105,6 +107,58 @@ export function registerHubTools(
       command: z.string().min(1).describe("Command to execute on the agent."),
     },
     async (args) => meshcentral.callTool("meshcentral_run_shell", args),
+  );
+
+  if (!hostEnabled) {
+    return;
+  }
+
+  registerHostTools(server, requireBackend(backends.host, "host"));
+}
+
+function registerHostTools(server: McpServer, host: BackendMcpClient): void {
+  server.tool(
+    "host_get_status",
+    "Admin only. Read-only host mounts inside the gateway container (no shell, no writes).",
+    {},
+    async () => host.callTool("host_get_status", {}),
+  );
+  server.tool(
+    "host_list",
+    "Admin only. List files under an allowlisted mount.",
+    {
+      path: z.string().min(1).optional().describe("alias or alias/relative, e.g. ops/runbooks"),
+      depth: z.number().int().min(0).max(8).optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+    },
+    async (args) => host.callTool("host_list", args),
+  );
+  server.tool(
+    "host_stat",
+    "Admin only. File or directory metadata under an allowlisted mount.",
+    {
+      path: z.string().min(1).describe("alias/relative"),
+    },
+    async (args) => host.callTool("host_stat", args),
+  );
+  server.tool(
+    "host_read",
+    "Admin only. Read a text file under an allowlisted mount. Binary files are not returned.",
+    {
+      path: z.string().min(1).describe("alias/relative"),
+      offset_line: z.number().int().min(0).optional(),
+      max_lines: z.number().int().min(1).max(500).optional(),
+    },
+    async (args) => host.callTool("host_read", args),
+  );
+  server.tool(
+    "host_search",
+    "Admin only. Search names or text under an allowlisted mount.",
+    {
+      query: z.string().min(2).describe("Search text, at least 2 characters"),
+      path_prefix: z.string().min(1).optional(),
+    },
+    async (args) => host.callTool("host_search", args),
   );
 }
 

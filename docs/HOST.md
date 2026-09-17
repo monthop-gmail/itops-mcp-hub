@@ -1,8 +1,8 @@
 # Host file MCP — ศึกษา Desktop Commander แล้วจะทำอย่างไรในฮับนี้
 
-สถานะ: **ศึกษาแล้ว ยังไม่ลงโค้ด**  
+สถานะ: **รอบแรกอ่านอย่างเดียวลงแล้ว ค่าเริ่มปิด**  
 ต้นทางที่ดู: [wonderwhy-er/DesktopCommanderMCP](https://github.com/wonderwhy-er/DesktopCommanderMCP) (MIT, npm `@wonderwhy-er/desktop-commander`)  
-กระทู้: `dis-58a707ef` seq 60–61
+กระทู้: `dis-58a707ef` seq 60–62 · ใบ `dec-ae0c1eda` · แผน `plan-f762e198`
 
 ฮับนี้ไม่ใช่ desktop ของคนนั่งเครื่องเดียว มันคือ Docker Compose ที่เปิด `/mcp/admin` ออกอินเทอร์เน็ตผ่าน Cloudflare Tunnel  
 จึง **ไม่นำแพ็กเกจต้นทางมาฝัง** และไม่เปิดเชลล์บนโฮสต์จนกว่า `meshcentral_run_shell` จะมีชั้นอนุมัติเดียวกัน
@@ -40,7 +40,7 @@ MCP ที่ให้ AI (Claude Desktop, ChatGPT, Cursor, …) ทำงาน
 | ค้นเอกสารงบ/ราชการ | `rag_*` ทั้งสาม hub | ไม่ใช่ไฟล์ระบบของโฮสต์ |
 | สั่งคำสั่งบนเครื่องผู้ใช้ | `meshcentral_run_shell` บน admin hub | **ยังปิด** จนกว่า ai-tools-mcp + คิวคน + audit + hash ของ payload |
 | สถานะเครื่องในไซต์ | Zabbix + Mesh inventory | ไม่ได้อ่านไฟล์บน compose host |
-| อ่าน-เขียนไฟล์บนเครื่องที่รัน Docker | **ยังไม่มี** | อันนี้ที่ Desktop Commander ทำ — และอันตรายกว่า Mesh shell เพราะอยู่ที่เกตเวย์ |
+| อ่านไฟล์ใต้โฟลเดอร์ที่เมานต์เข้าเกตเวย์ | `host_*` บน admin เมื่อ `HOST_ENABLED=true` | เขียน/เชลล์ยังไม่มี |
 
 `meshcentral_run_shell` สั่งบน **เอเจนต์** (Windows/Linux ในไซต์)  
 Desktop Commander สั่งบน **เครื่องที่รัน MCP**  
@@ -64,21 +64,21 @@ Desktop Commander สั่งบน **เครื่องที่รัน M
 
 ## แนวที่เข้ากับฮับ
 
-แพ็กเกจในรีโปเอง: `packages/mcp-host` → คอนเทนเนอร์ `sub-mcp-host`  
-ฮับ **admin เท่านั้น** เรียกต่อเมื่อ `HOST_ENABLED=true`
+แพ็กเกจในรีโป: `packages/mcp-host` → คอนเทนเนอร์ `sub-mcp-host` (ขึ้นเสมอ โหมด fixture)  
+ฮับ **admin เท่านั้น** ลงทะเบียน `host_*` เมื่อ `HOST_ENABLED=true`
 
 ขอบเขตจริง = **โวลุ่มที่เมานต์เข้าคอนเทนเนอร์** ไม่ใช่รายการพาธใน JSON ที่โมเดลแก้ได้
 
 ```
 Cloudflare Tunnel → Nginx Bearer admin
   → mcp-hub-admin
-      → sub-mcp-host   (ค่าเริ่มไม่ขึ้น หรือขึ้นแล้วไม่ลงทะเบียนเครื่องมือ)
-          volumes:  HOST_MOUNTS ที่ไซต์เลือก เมานต์ :ro
+      → sub-mcp-host
+          volumes:  HOST_HOST_DATA_DIR → /data/host:ro  (เมื่อ HOST_BACKEND=files)
 ```
 
-ไซต์ที่ยังไม่ใช้: ไม่ตั้ง `HOST_ENABLED` → ฮับ admin ไม่ต่อ backend นี้ → `tools/list` เท่าเดิม
+ไซต์ที่ยังไม่ใช้: ปล่อย `HOST_ENABLED=false` (ค่าเริ่ม) → `tools/list` ของทั้งสามฮับไม่มี `host_*`
 
-## รอบแรกที่เสนอ (อ่านอย่างเดียว)
+## รอบแรก (อ่านอย่างเดียว) — ใช้ได้แล้ว
 
 เครื่องมือ (ชื่อขึ้นต้น `host_` ไม่ชน `rag_` / Mesh):
 
@@ -95,20 +95,41 @@ Cloudflare Tunnel → Nginx Bearer admin
 กติกา jail:
 
 - พาธที่รับต้อง `realpath` แล้วอยู่ใต้ mount ที่ประกาศ
-- ห้ามตาม symlink ที่ชี้ raนอก mount
+- ห้ามตาม symlink ที่ชี้ไปนอก mount
 - ไฟล์ไบนารีไม่ส่งทั้งก้อน — ส่งชนิด + ขนาด
 - ลิมิตขนาดอ่านและจำนวนผลค้น
 - ทุก `tools/call` ลง audit ท้องถิ่น (tool, พาธสัมพัทธ์, เวลา, ผล ok/error) — ไม่ส่งออกไซต์
 - คอนเทนเนอร์รัน user `itops` ไม่ใช่ root; โวลุ่ม `:ro`
 
-ค่าใน `.env` (ยังไม่เพิ่มจนกว่าจะลงมือ):
+ค่าใน `.env`:
 
 ```
 HOST_ENABLED=false
-HOST_MOUNTS=           # ว่าง = ไม่มีเครื่องมือ แม้ ENABLED
-# ตัวอย่างเมื่อเปิด:  ./data/host:/data/host:ro
+HOST_BACKEND=fixture
+HOST_HOST_DATA_DIR=./data/host
+HOST_HOST_AUDIT_DIR=./data/host-audit
+HOST_MOUNTS=ops:/data/host
 HOST_MAX_READ_BYTES=1048576
 HOST_MAX_LIST=200
+HOST_MAX_SEARCH=50
+```
+
+เปิดให้ทดลองด้วย fixture (ไม่เมานต์ดิสก์จริง):
+
+```
+HOST_ENABLED=true
+HOST_BACKEND=fixture
+```
+
+แล้ว `docker compose up -d --build mcp-hub-admin sub-mcp-host`
+
+เปิดอ่านโฟลเดอร์จริง:
+
+```
+HOST_ENABLED=true
+HOST_BACKEND=files
+HOST_HOST_DATA_DIR=/path/on/compose-host
+HOST_MOUNTS=ops:/data/host
 ```
 
 อย่าเมานต์ `/`, `/etc`, `/var/lib/docker`, โฮม SSH, `.env` ของฮับ, หรือโฟลเดอร์บัญชีที่มี PII
@@ -143,16 +164,11 @@ HOST_MAX_LIST=200
 
 ## ผลกระทบต่อไซต์ที่ pull `main`
 
-รอบศึกษาครั้งนี้ **ไม่มีคอนเทนเนอร์ใหม่**  
-เมื่อลงรอบแรก: ค่าเริ่มปิด — kknang / ICB / MTR / NST ที่ไม่ตั้ง `HOST_ENABLED` ต้องได้ `tools/list` ชุดเดิม
+มีคอนเทนเนอร์ `sub-mcp-host` เพิ่ม (ค่าเริ่ม fixture)  
+ฮับ admin **ไม่ลง** `host_*` จนกว่า `HOST_ENABLED=true` — kknang / ICB / MTR / NST ที่ไม่ตั้งธงนี้ได้ `tools/list` ชุดเดิม
 
-อย่าส่ง `ADMIN_TOKEN` ให้ทีมทดลองอยู่แล้ว ([TEAM-CONNECT.md](TEAM-CONNECT.md)) — เครื่องมือโฮสต์ถ้าเกิดจะอยู่เส้นนั้นเท่านั้น
+อย่าส่ง `ADMIN_TOKEN` ให้ทีมทดลองอยู่แล้ว ([TEAM-CONNECT.md](TEAM-CONNECT.md)) — เครื่องมือโฮสต์อยู่เส้นนั้นเท่านั้น
 
-## เกณฑ์พร้อมลงมือ
+## สิ่งที่ยังไม่ทำ
 
-เจ้าของงานสั่งรอบแรก (เช่น «จัดเลย») และระบุอย่างน้อยหนึ่งอย่าง:
-
-- เปิด fixture ในคอนเทนเนอร์เพื่อมีเครื่องมือให้ทดลองบน admin hub โดยไม่เมานต์ดิสก์จริง หรือ
-- ระบุ alias + พาธโฮสต์ที่จะเมานต์ `:ro` (ไม่ dump ในโต๊ะ collab)
-
-ก่อนนั้นเอกสารนี้คือสัญญาออกแบบ ไม่ใช่ฟีเจอร์ที่รันอยู่
+เขียนไฟล์, เชลล์บนโฮสต์, Excel/PDF editor, telemetry, `set_config`, ดึง URL, ฝังแพ็กเกจ Desktop Commander

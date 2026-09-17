@@ -87,7 +87,7 @@
             <tr>
               <td class="mono">/mcp/admin/mcp</td>
               <td><code>admin</code> เท่านั้น</td>
-              <td>ชุดเดียวกัน + <code>meshcentral_run_shell</code></td>
+              <td>ชุดเดียวกัน + <code>meshcentral_run_shell</code> + <code>host_*</code> เมื่อเปิด</td>
             </tr>
             <tr>
               <td class="mono">/mcp/accounting/mcp</td>
@@ -105,8 +105,8 @@
           ต้อง <code>approve</code> ก่อนบันทึกข้อความ และค่าเริ่มต้นไม่ส่งภาพออกจากไซต์
         </p>
         <p>
-          ยังไม่มีเครื่องมืออ่านไฟล์/เชลล์บนเครื่องเกตเวย์ (แนว Desktop Commander) —
-          ออกแบบไว้ในเอกสาร HOST ของรีโป ค่าเริ่มปิดและไม่ฝังแพ็กเกจต้นทาง
+          <code>host_*</code> อ่านไฟล์ใต้โฟลเดอร์ที่เมานต์เข้าเกตเวย์ — เฉพาะแอดมิน และค่าเริ่ม
+          <code>HOST_ENABLED=false</code> จึงไม่โผล่ในรายการเครื่องมือ ไม่ใช่ Desktop Commander และยังไม่มีเชลล์บนโฮสต์
         </p>
         <p>
           ChatGPT / Grok / Gemini: เปิด <a href="/oauth/setup">/oauth/setup</a> เพื่อคัดลอก Client ID

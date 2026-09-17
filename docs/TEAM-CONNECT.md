@@ -23,9 +23,9 @@
 | `rag_list_ocr_queue` / `rag_review_ocr_job` | คิวหน้าสแกนว่าง — ต้อง approve ก่อนส่งข้อความ/ภาพ |
 | `rag_run_ocr` | ส่งหน้าที่ approve แล้วไป Typhoon (หรือค่ายที่ตั้ง) ทีละหน้า |
 
-ถ้า AI เห็น `meshcentral_run_shell` แปลว่าต่อผิดเส้น — ถอดออกทันที
+ถ้า AI เห็น `meshcentral_run_shell` หรือ `host_*` แปลว่าต่อผิดเส้น — ถอดออกทันที
 
-เครื่องมือแบบ Desktop Commander (`host_*` / เชลล์บนเครื่องเกตเวย์) **ยังไม่มี** — ถ้าโมเดลคุยเรื่องนี้ ให้ชี้ [HOST.md](HOST.md) อย่าส่ง `ADMIN_TOKEN` เพื่อทดลอง
+`host_*` เป็นเครื่องมือแอดมิน อ่านอย่างเดียว ค่าเริ่มปิด — ดู [HOST.md](HOST.md) อย่าส่ง `ADMIN_TOKEN` เพื่อทดลอง
 
 ทีมบัญชีเห็น `express_*` หรือ `allinone_*` หรือ `odoo_*` (ตาม `ACCOUNTING_PRODUCT` ของไซต์) บวกชุด `rag_*` เดียวกันบน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
 เอกสาร RAG ดู [RAG.md](RAG.md)  
