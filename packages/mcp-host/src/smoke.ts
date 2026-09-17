@@ -55,6 +55,10 @@ async function main(): Promise<void> {
     `list fixture: ${listed.map((e) => e.path).join(",")}`,
   );
   assert(!listed.some((e) => e.path.includes(".env")), "list hides .env");
+  assert(
+    listed.some((e) => e.path === "ops/secret/README.md"),
+    "secret README is visible so the folder is not empty",
+  );
 
   const readme = fs.read("ops/README.md");
   assert(!readme.binary && (readme.text || "").includes("host_search"), "read readme");

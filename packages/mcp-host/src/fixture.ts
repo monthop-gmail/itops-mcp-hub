@@ -22,6 +22,11 @@ export function writeFixtureHost(root = join(tmpdir(), `itops-host-fixture-${pro
   writeFileSync(join(root, "notes", "sample.txt"), "บันทึกตัวอย่างสำหรับ host_read\nบรรทัดสอง\n", "utf8");
   writeFileSync(join(root, "bin-sample.dat"), Buffer.from([0x00, 0x01, 0x02, 0xff, 0x10, 0x20]));
   writeFileSync(join(root, "secret", ".env"), "ADMIN_TOKEN=not-a-real-token\n", "utf8");
+  writeFileSync(
+    join(root, "secret", "README.md"),
+    "โฟลเดอร์นี้มีไฟล์ที่ถูกกัน (.env / คีย์) จึงไม่โผล่ใน host_list และอ่านไม่ได้\nนี่ไม่ใช่บั๊ก — ใช้ทดสอบว่าของลับไม่รั่วผ่าน MCP\n",
+    "utf8",
+  );
   try {
     symlinkSync("/etc/passwd", join(root, "escape-link"));
   } catch {
