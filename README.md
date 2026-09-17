@@ -68,7 +68,7 @@ Nginx :80 (internal) / MCP_LAN_PORT on the host
 | `rag_run_ocr(job_id, provider?, save?)` | yes | yes | yes |
 | `rag_submit_ocr(job_id, text)` | yes | yes | yes |
 
-Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only by default; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md), Odoo = [docs/ODOO.md](docs/ODOO.md) (write tools stay hidden until `ODOO_ALLOW_WRITE=true`). Attendance (ZKTime 5) is on the IT/admin hubs; see [docs/ZKTIME.md](docs/ZKTIME.md). pstack apps on the same hubs; see [docs/PSTACK.md](docs/PSTACK.md). Document RAG does not require a fourth connector URL; scanned pages go through an OCR queue (approve before text/images leave the site). See [docs/RAG.md](docs/RAG.md).
+Nginx rejects an IT token on `/mcp/admin/` and `/mcp/accounting/` with HTTP 403. An accounting token cannot call IT or admin paths. The IT hub process does not register the shell tool. Accounting tools are read-only by default; Express = [docs/EXPRESS.md](docs/EXPRESS.md), Allinone = [docs/ALLINONE.md](docs/ALLINONE.md), Odoo = [docs/ODOO.md](docs/ODOO.md) (write tools stay hidden until `ODOO_ALLOW_WRITE=true`). Attendance (ZKTime 5) is on the IT/admin hubs; see [docs/ZKTIME.md](docs/ZKTIME.md). pstack apps on the same hubs; see [docs/PSTACK.md](docs/PSTACK.md). Document RAG does not require a fourth connector URL; scanned pages go through an OCR queue (approve before text/images leave the site). See [docs/RAG.md](docs/RAG.md). A Desktop Commander–style host file/shell MCP is **not shipped** — study and first-slice design live in [docs/HOST.md](docs/HOST.md) (own admin-only sub-mcp, default off; do not vendor the upstream package).
 
 ## Requirements
 
@@ -349,6 +349,8 @@ docs/ALLINONE.md          # Allinone CS (MySQL) / VM (Access)
 docs/ODOO.md              # Odoo JSON-RPC for ICB / NST (not MTR)
 docs/PSTACK.md            # pstack POST /mcp bridge (tools, not the inner agent)
 docs/ZKTIME.md            # ZKTime 5 attendance (Access / SQL Server)
+docs/RAG.md               # local document RAG + OCR queue
+docs/HOST.md              # study: host file MCP (not implemented)
 ```
 
 ## Operations notes

@@ -25,6 +25,8 @@
 
 ถ้า AI เห็น `meshcentral_run_shell` แปลว่าต่อผิดเส้น — ถอดออกทันที
 
+เครื่องมือแบบ Desktop Commander (`host_*` / เชลล์บนเครื่องเกตเวย์) **ยังไม่มี** — ถ้าโมเดลคุยเรื่องนี้ ให้ชี้ [HOST.md](HOST.md) อย่าส่ง `ADMIN_TOKEN` เพื่อทดลอง
+
 ทีมบัญชีเห็น `express_*` หรือ `allinone_*` หรือ `odoo_*` (ตาม `ACCOUNTING_PRODUCT` ของไซต์) บวกชุด `rag_*` เดียวกันบน `/mcp/accounting/mcp` ไม่เห็น Zabbix/MeshCentral
 เอกสาร RAG ดู [RAG.md](RAG.md)  
 เข้า-ออกงาน ZKTime ดู [ZKTIME.md](ZKTIME.md) — รายงานสาธารณะแค่จำนวนแถว ห้าม dump รายชื่อพนักงาน  
