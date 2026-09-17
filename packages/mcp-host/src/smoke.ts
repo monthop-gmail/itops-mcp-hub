@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { HostAudit } from "./audit.js";
@@ -48,6 +48,7 @@ async function main(): Promise<void> {
   const status = fs.status();
   assert(status.read_only && !status.write && !status.shell && status.sample, "status flags");
   assert(status.mounts.length === 1 && status.mounts[0].alias === "ops", "status mount alias");
+  assert(status.mounts[0].readable === true, "fixture mount readable");
 
   const listed = fs.list(undefined, 3);
   assert(
@@ -143,6 +144,29 @@ async function main(): Promise<void> {
   assert(!outside, "reject .. escape");
 
   assert(existsSync(auditFile) && readFileSync(auditFile, "utf8").includes("host_read"), "audit written");
+
+  if (typeof process.getuid === "function" && process.getuid() !== 0) {
+    const denied = join(tmpdir(), `itops-host-denied-${process.pid}`);
+    mkdirSync(denied, { recursive: true });
+    writeFileSync(join(denied, "hidden.txt"), "nope\n", "utf8");
+    chmodSync(denied, 0o000);
+    try {
+      const deniedMounts = resolveMounts([{ alias: "ops", root: denied }]);
+      const deniedFs = new HostFs("files", deniedMounts, limits, false, "denied", new HostAudit(null));
+      assert(deniedFs.status().mounts[0]?.readable === false, "status marks unreadable mount");
+      let listedDenied = false;
+      try {
+        deniedFs.list(undefined, 2);
+        listedDenied = true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        assert(message.includes("permission denied"), `denied list message: ${message}`);
+      }
+      assert(!listedDenied, "unreadable mount must not return an empty listing");
+    } finally {
+      chmodSync(denied, 0o700);
+    }
+  }
 
   console.log("mcp-host smoke ok");
 }

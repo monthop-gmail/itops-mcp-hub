@@ -84,7 +84,7 @@ Cloudflare Tunnel → Nginx Bearer admin
 
 | Tool | ทำอะไร |
 | --- | --- |
-| `host_get_status` | เปิดอยู่หรือไม่, รายชื่อ mount (ไม่ dump พาธโฮสต์ดิบถ้าไม่จำเป็น — ใช้ alias ในคอนเทนเนอร์), โหมด read-only |
+| `host_get_status` | เปิดอยู่หรือไม่, รายชื่อ mount, **readable** ของแต่ละ mount, uid ของโปรเซสในคอนเทนเนอร์ |
 | `host_list` | ลิสต์ไฟล์ใต้ mount ที่อนุญาต ความลึกจำกัด |
 | `host_stat` | metadata (ขนาด, mtime, เป็นไฟล์หรือโฟลเดอร์) |
 | `host_read` | อ่านข้อความ จำกัดบรรทัด/ไบต์ ไม่ตาม symlink ออกนอก jail |
@@ -129,9 +129,19 @@ HOST_BACKEND=fixture
 ```
 HOST_ENABLED=true
 HOST_BACKEND=files
-HOST_HOST_DATA_DIR=/path/on/compose-host
+HOST_HOST_DATA_DIR=/opt/itops-host-ops
 HOST_MOUNTS=ops:/data/host
 ```
+
+โฟลเดอร์นั้นต้องให้ user ในคอนเทนเนอร์อ่านได้ (`itops` ไม่ใช่ root). เช็คด้วย:
+
+```
+docker exec --user itops <sub-mcp-host> ls /data/host
+```
+
+อย่าใช้ `docker exec --user 0` เป็นตัวตัดสิน — root เห็นไฟล์ที่ MCP เห็นไม่ได้  
+อย่าเมานต์ `$HOME` — มี `.ssh` โทเคน และโปรไฟล์เบราว์เซอร์  
+ถ้า `ls` ของ `itops` ว่างหรือ Permission denied: `chmod o+rX` โฟลเดอร์นั้น หรือย้ายไปโฟลเดอร์ 755 โดยเฉพาะ
 
 อย่าเมานต์ `/`, `/etc`, `/var/lib/docker`, โฮม SSH, `.env` ของฮับ, หรือโฟลเดอร์บัญชีที่มี PII
 

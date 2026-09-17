@@ -21,7 +21,8 @@ export interface HostStatus {
   read_only: true;
   write: false;
   shell: false;
-  mounts: Array<{ alias: string; path: string }>;
+  mounts: Array<{ alias: string; path: string; readable: boolean; error?: string }>;
+  container_user: { uid: number | null; gid: number | null };
   max_read_bytes: number;
   max_list: number;
   max_search: number;

@@ -16,6 +16,48 @@ import { HostError } from "./types.js";
 
 const SKIP_DIRS = new Set([".git", "node_modules", "$recycle.bin", "system volume information"]);
 
+function containerIds(): { uid: number | null; gid: number | null } {
+  return {
+    uid: typeof process.getuid === "function" ? process.getuid() : null,
+    gid: typeof process.getgid === "function" ? process.getgid() : null,
+  };
+}
+
+function probeDir(abs: string): { readable: boolean; error?: string } {
+  try {
+    readdirSync(abs);
+    return { readable: true };
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? String((error as NodeJS.ErrnoException).code) : "";
+    const ids = containerIds();
+    if (code === "EACCES" || code === "EPERM") {
+      return {
+        readable: false,
+        error: `permission denied for container uid=${ids.uid} gid=${ids.gid} (MCP is not root; docker exec --user 0 is not the same)`,
+      };
+    }
+    return {
+      readable: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function readDirChecked(abs: string, publicPath: string): string[] {
+  try {
+    return readdirSync(abs);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? String((error as NodeJS.ErrnoException).code) : "";
+    const ids = containerIds();
+    if (code === "EACCES" || code === "EPERM") {
+      throw new HostError(
+        `Cannot list ${publicPath}: permission denied for container uid=${ids.uid} gid=${ids.gid}. docker exec as root sees files the MCP user cannot. chmod o+rX the mounted folder, or set HOST_HOST_DATA_DIR to a dedicated 755 directory — do not mount a home folder.`,
+      );
+    }
+    throw new HostError(`Cannot list ${publicPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function staysInside(root: string, abs: string): boolean {
   const rel = relative(root, abs);
   return rel === "" || (!rel.startsWith("..") && rel !== "..");
@@ -40,7 +82,16 @@ export class HostFs {
       read_only: true,
       write: false,
       shell: false,
-      mounts: this.mounts.map((m) => ({ alias: m.alias, path: m.root })),
+      mounts: this.mounts.map((m) => {
+        const probe = probeDir(m.root);
+        return {
+          alias: m.alias,
+          path: m.root,
+          readable: probe.readable,
+          error: probe.error,
+        };
+      }),
+      container_user: containerIds(),
       max_read_bytes: this.limits.maxReadBytes,
       max_list: this.limits.maxList,
       max_search: this.limits.maxSearch,
@@ -63,6 +114,16 @@ export class HostFs {
       return out;
     }
     const start = resolvePublicPath(this.mounts, pathInput?.trim() || this.mounts[0].alias);
+    try {
+      if (lstatSync(start.abs).isDirectory()) {
+        readDirChecked(start.abs, start.publicPath);
+      }
+    } catch (error) {
+      if (error instanceof HostError) {
+        this.audit.record({ tool: "host_list", path: start.publicPath, ok: false, error: error.message });
+      }
+      throw error;
+    }
     this.walkList(start.abs, start.mount, 0, maxDepth, cap, out);
     this.audit.record({ tool: "host_list", path: start.publicPath, ok: true });
     return out;
@@ -142,6 +203,9 @@ export class HostFs {
     const roots = pathPrefix?.trim()
       ? [resolvePublicPath(this.mounts, pathPrefix)]
       : this.mounts.map((m) => resolvePublicPath(this.mounts, m.alias));
+    for (const root of roots) {
+      readDirChecked(root.abs, root.publicPath);
+    }
     const hits: HostSearchHit[] = [];
     for (const root of roots) {
       this.walkSearch(root.abs, root.mount, needle, hits);

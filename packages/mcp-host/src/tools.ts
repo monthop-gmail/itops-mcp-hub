@@ -12,7 +12,7 @@ function fail(error: unknown) {
 export function registerHostTools(server: McpServer, fs: HostFs): void {
   server.tool(
     "host_get_status",
-    "Admin only. สถานะ host MCP: โหมดอ่านอย่างเดียว รายชื่อ mount ในคอนเทนเนอร์ ไม่มีเชลล์/เขียน",
+    "Admin only. สถานะ host MCP: โหมดอ่านอย่างเดียว, readable ของแต่ละ mount, uid ของโปรเซส (ไม่ใช่ root)",
     {},
     async () => jsonResult(fs.status()),
   );
