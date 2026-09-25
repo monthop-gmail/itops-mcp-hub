@@ -26,6 +26,7 @@ export interface LegalClaim {
 
 export interface LegalGeneration {
   claims: LegalClaim[];
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
 export interface LegalInference {
@@ -42,4 +43,5 @@ export interface LegalAnswer {
   claims: LegalClaim[];
   evidence: LegalHit[];
   reason?: string;
+  usage?: LegalGeneration["usage"];
 }

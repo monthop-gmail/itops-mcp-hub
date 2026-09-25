@@ -49,14 +49,16 @@ export class LegalService {
       return { ...base, status: "review_required", claims: [], reason: "retrieval_only" };
     }
     try {
-      const checked = validateClaims(await this.inference.generate(question, valid), valid);
+      const generated = await this.inference.generate(question, valid);
+      const checked = validateClaims(generated, valid);
       if (!checked.ok) {
-        return { ...base, status: "insufficient_evidence", claims: [], reason: checked.reason };
+        return { ...base, status: "insufficient_evidence", claims: [], reason: checked.reason, usage: generated.usage };
       }
       // Structural citation checks do not prove legal interpretation. A human reviews every claim.
-      return { ...base, status: "review_required", claims: checked.claims };
-    } catch {
-      return { ...base, status: "insufficient_evidence", claims: [], reason: "inference_unavailable" };
+      return { ...base, status: "review_required", claims: checked.claims, usage: generated.usage };
+    } catch (error) {
+      const timeout = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
+      return { ...base, status: "insufficient_evidence", claims: [], reason: timeout ? "inference_timeout" : "inference_unavailable" };
     }
   }
 }

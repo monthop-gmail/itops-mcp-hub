@@ -7,23 +7,28 @@ export class RetrievalOnly implements LegalInference {
   }
 }
 
-// The model process is separately provisioned on a CPU host. This adapter sends
-// only the small retrieved fixture context to an OpenAI-compatible local server.
+// Sends only fictional, retrieved fixture context to a local or HTTPS endpoint.
 export class OpenAiCompatibleLegal implements LegalInference {
   readonly id: string;
-  constructor(private readonly baseUrl: string, private readonly model: string, private readonly timeoutMs = 120000) {
+  private readonly chatUrl: URL;
+  constructor(baseUrl: string, private readonly model: string, private readonly timeoutMs = 120000, private readonly apiKey = "") {
     const url = new URL(baseUrl);
-    if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "host.docker.internal"].includes(url.hostname)) {
-      throw new Error("LEGAL_MODEL_URL must be a local HTTP endpoint for the fixture POC");
+    if ((url.protocol !== "https:" && !(url.protocol === "http:" && ["127.0.0.1", "localhost", "host.docker.internal"].includes(url.hostname))) ||
+        url.username || url.password || url.search || url.hash) {
+      throw new Error("LEGAL_MODEL_URL must be HTTPS or local HTTP, with no embedded credentials/query");
     }
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) throw new Error("LEGAL_MODEL_TIMEOUT_MS must be 1000..600000");
+    const path = url.pathname.replace(/\/$/, "");
+    url.pathname = `${path.endsWith("/v1") ? path : `${path}/v1`}/chat/completions`;
+    this.chatUrl = url;
     this.id = `openai-compatible:${model}`;
   }
 
   async generate(question: string, evidence: LegalHit[]): Promise<LegalGeneration> {
-    const response = await fetch(new URL("/v1/chat/completions", this.baseUrl), {
+    const response = await fetch(this.chatUrl, {
       method: "POST",
       signal: AbortSignal.timeout(this.timeoutMs),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}) },
       body: JSON.stringify({
         model: this.model, temperature: 0, max_tokens: 512,
         messages: [
@@ -33,14 +38,16 @@ export class OpenAiCompatibleLegal implements LegalInference {
       }),
     });
     if (!response.ok) throw new Error(`legal model HTTP ${response.status}`);
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } };
     const content = payload.choices?.[0]?.message?.content;
     if (!content) throw new Error("legal model returned no content");
     const parsed: unknown = JSON.parse(content);
     if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as LegalGeneration).claims)) {
       throw new Error("legal model returned invalid JSON contract");
     }
-    return parsed as LegalGeneration;
+    const usage = payload.usage;
+    const validUsage = usage && [usage.prompt_tokens, usage.completion_tokens, usage.total_tokens].every((n) => Number.isSafeInteger(n) && Number(n) >= 0);
+    return { claims: (parsed as LegalGeneration).claims, ...(validUsage ? { usage: usage as LegalGeneration["usage"] } : {}) };
   }
 }
 
@@ -49,7 +56,7 @@ export function createInference(env: NodeJS.ProcessEnv = process.env): LegalInfe
   if (backend === "retrieval-only") return new RetrievalOnly();
   if (backend === "openai-compatible") {
     if (!env.LEGAL_MODEL_URL || !env.LEGAL_MODEL_ID) throw new Error("LEGAL_MODEL_URL and LEGAL_MODEL_ID are required");
-    return new OpenAiCompatibleLegal(env.LEGAL_MODEL_URL, env.LEGAL_MODEL_ID);
+    return new OpenAiCompatibleLegal(env.LEGAL_MODEL_URL, env.LEGAL_MODEL_ID, Number(env.LEGAL_MODEL_TIMEOUT_MS ?? 120000), env.LEGAL_MODEL_API_KEY ?? "");
   }
   throw new Error(`Unsupported LEGAL_INFERENCE_BACKEND: ${backend}`);
 }

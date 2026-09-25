@@ -1,24 +1,18 @@
+import { runEval } from "./eval.js";
 import { createInference } from "./inference.js";
-import { LegalService } from "./service.js";
+
+function optionalRate(value: string | undefined): number | undefined {
+  if (value === undefined || value === "") return undefined;
+  const rate = Number(value);
+  if (!Number.isFinite(rate) || rate < 0) throw new Error("Benchmark token rates must be non-negative numbers");
+  return rate;
+}
 
 const inference = createInference();
-if (inference.id === "retrieval-only") {
-  throw new Error("Select LEGAL_INFERENCE_BACKEND=openai-compatible before benchmarking");
+if (inference.id !== "retrieval-only" && new URL(process.env.LEGAL_MODEL_URL!).protocol === "https:" && process.env.LEGAL_BENCHMARK_ALLOW_REMOTE !== "true") {
+  throw new Error("Set LEGAL_BENCHMARK_ALLOW_REMOTE=true to authorize billable remote calls");
 }
-const service = new LegalService(inference);
-const question = "มาตรา 10";
-const asOf = "2026-09-25";
-const durations: number[] = [];
-let failed = 0;
-for (let i = 0; i < 11; i++) {
-  const start = performance.now();
-  const answer = await service.ask(question, asOf);
-  const ms = Math.round(performance.now() - start);
-  if (i > 0) durations.push(ms);
-  if (answer.status !== "review_required" || answer.claims.length === 0) failed++;
-}
-durations.sort((a, b) => a - b);
-const percentile = (p: number): number => durations[Math.ceil(p * durations.length) - 1];
-console.log(JSON.stringify({ backend: inference.id, sample: true, question, runs: durations.length,
-  warmup_excluded: 1, p50_ms: percentile(0.5), p95_ms: percentile(0.95), failed, durations_ms: durations }));
-if (failed) process.exitCode = 1;
+const result = await runEval(inference, Number(process.env.LEGAL_BENCHMARK_REPEATS ?? 1),
+  optionalRate(process.env.LEGAL_PRICE_INPUT_PER_1M_USD), optionalRate(process.env.LEGAL_PRICE_OUTPUT_PER_1M_USD));
+console.log(JSON.stringify(result, null, 2));
+if (result.failed) process.exitCode = 1;

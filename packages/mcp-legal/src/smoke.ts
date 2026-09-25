@@ -1,5 +1,6 @@
 import { fixtureCorpus, legalSearch, sourceHash } from "./corpus.js";
 import { OpenAiCompatibleLegal, RetrievalOnly } from "./inference.js";
+import { assess, runEval } from "./eval.js";
 import { LegalService, validateClaims } from "./service.js";
 import type { LegalInference } from "./types.js";
 
@@ -30,22 +31,38 @@ async function main(): Promise<void> {
   const badModel: LegalInference = { id: "mock-bad", async generate() { return { claims: [{ ...goodClaim, evidence_ids: ["fake"] }] }; } };
   assert((await new LegalService(badModel).ask("มาตรา 10", date)).status === "insufficient_evidence", "invalid model claim abstains");
   let rejected = false;
-  try { new OpenAiCompatibleLegal("https://external.example", "fixture"); } catch { rejected = true; }
-  assert(rejected, "remote model endpoint rejected in fixture POC");
+  try { new OpenAiCompatibleLegal("http://external.example", "fixture"); } catch { rejected = true; }
+  assert(rejected, "insecure remote model endpoint rejected");
+  rejected = false;
+  try { new OpenAiCompatibleLegal("https://user:secret@external.example", "fixture"); } catch { rejected = true; }
+  assert(rejected, "embedded URL credentials rejected");
   const previousFetch = globalThis.fetch;
   let sentEvidence = false;
-  globalThis.fetch = (async (_input, init) => {
+  let authenticated = false;
+  let correctUrl = false;
+  globalThis.fetch = (async (input, init) => {
     const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
     sentEvidence = request.messages[1].content.includes(section10[0].evidence_id);
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ claims: [goodClaim] }) } }] }), {
+    authenticated = new Headers(init?.headers).get("authorization") === "Bearer test-token";
+    correctUrl = String(input) === "https://cloud.example/openai/v1/chat/completions";
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ claims: [goodClaim] }) } }], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } }), {
       status: 200, headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
   try {
-    const model = new OpenAiCompatibleLegal("http://127.0.0.1:8080", "fixture");
+    const model = new OpenAiCompatibleLegal("https://cloud.example/openai/v1", "fixture", 120000, "test-token");
     const result = await model.generate("มาตรา 10", section10);
-    assert(sentEvidence && result.claims[0].evidence_ids[0] === section10[0].evidence_id, "model adapter receives pinned evidence and parses JSON");
+    assert(sentEvidence && authenticated && correctUrl && result.claims[0].evidence_ids[0] === section10[0].evidence_id && result.usage?.total_tokens === 120, "cloud adapter URL/auth/evidence/usage");
   } finally { globalThis.fetch = previousFetch; }
+  const baseline = await runEval(new RetrievalOnly());
+  assert(baseline.passed === 5 && baseline.failed === 0 && baseline.inference_errors === 0, "five-case retrieval baseline");
+  const mockEval = await runEval({ id: "mock-model", async generate(_question, evidence) {
+    return { claims: [{ text: "fixture", evidence_ids: [evidence[0].evidence_id], quotes: [evidence[0].text] }], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } };
+  } }, 2, 1, 2);
+  assert(mockEval.passed === 10 && mockEval.failed === 0 && Math.abs((mockEval.estimated_token_cost_usd ?? 0) - 0.00056) < 1e-10, "repeatable mock eval and token cost");
+  assert(!assess({ ...draft, claims: [{ ...goodClaim, evidence_ids: ["fake"] }] }, "10", false).citation_correct, "eval rejects false citation");
+  const unavailable = await runEval({ id: "unavailable", async generate() { throw new Error("offline"); } });
+  assert(unavailable.inference_errors === 2 && unavailable.failed === 2, "inference errors counted without network");
   console.log("legal fixture, citation, stale-date, fallback smoke ok");
 }
 main().catch((error) => { console.error(error); process.exit(1); });
