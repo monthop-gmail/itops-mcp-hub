@@ -1,6 +1,7 @@
 """Owner-gated, fixture-only Modal candidate. Importing this file does not deploy it."""
 
 from pathlib import Path
+import json
 import subprocess
 import time
 
@@ -30,6 +31,26 @@ vllm_image = (
 )
 
 
+def _normalize_tokenizer_config():
+    """Adapt the pinned Transformers-5 metadata for vLLM's Transformers 4."""
+    config_path = MODEL_DIR / "tokenizer_config.json"
+    backup_path = MODEL_DIR / "tokenizer_config.upstream.json"
+    if not (MODEL_DIR / "tokenizer.json").is_file():
+        raise RuntimeError("Pinned model is missing tokenizer.json")
+    config = json.loads(config_path.read_text())
+    tokenizer_class = config.get("tokenizer_class")
+    if tokenizer_class == "PreTrainedTokenizerFast":
+        if not backup_path.is_file():
+            raise RuntimeError("Patched tokenizer config lacks upstream backup")
+        return
+    if tokenizer_class != "TokenizersBackend" or backup_path.exists():
+        raise RuntimeError(f"Unexpected tokenizer metadata: {tokenizer_class}")
+    backup_path.write_bytes(config_path.read_bytes())
+    config["tokenizer_class"] = "PreTrainedTokenizerFast"
+    config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
+    print("tokenizer_config_normalized=PreTrainedTokenizerFast", flush=True)
+
+
 @app.function(
     image=download_image,
     volumes={"/models": model_volume},
@@ -44,10 +65,25 @@ def preload_model():
 
     started = time.monotonic()
     snapshot_download(repo_id=MODEL_REPO, revision=MODEL_REVISION, local_dir=MODEL_DIR)
+    _normalize_tokenizer_config()
     model_volume.commit()
     if not (MODEL_DIR / "config.json").is_file():
         raise RuntimeError("Model cache lacks config.json")
     print(f"preload_seconds={time.monotonic() - started:.2f} revision={MODEL_REVISION}")
+
+
+@app.function(
+    image=download_image,
+    volumes={"/models": model_volume},
+    cpu=0.125,
+    memory=512,
+    timeout=120,
+    max_containers=1,
+)
+def normalize_cached_tokenizer():
+    """Paid CPU-only repair for the already downloaded, dedicated Volume."""
+    _normalize_tokenizer_config()
+    model_volume.commit()
 
 
 @app.server(
