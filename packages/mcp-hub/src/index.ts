@@ -44,17 +44,19 @@ function envFlag(name: string, fallback = false): boolean {
 }
 
 const hostEnabled = role === "admin" && envFlag("HOST_ENABLED", false);
+const legalEnabled = envFlag("LEGAL_ENABLED", false);
 
 function createBackends(): HubBackends {
   const rag = new BackendMcpClient("rag", requireEnv("RAG_MCP_URL"));
+  const legal = legalEnabled ? new BackendMcpClient("legal", requireEnv("LEGAL_MCP_URL"), 180000) : undefined;
   if (role === "accounting") {
     if (accountingProduct === "allinone") {
-      return { allinone: new BackendMcpClient("allinone", requireEnv("ALLINONE_MCP_URL")), rag };
+      return { allinone: new BackendMcpClient("allinone", requireEnv("ALLINONE_MCP_URL")), rag, legal };
     }
     if (accountingProduct === "odoo") {
-      return { odoo: new BackendMcpClient("odoo", requireEnv("ODOO_MCP_URL")), rag };
+      return { odoo: new BackendMcpClient("odoo", requireEnv("ODOO_MCP_URL")), rag, legal };
     }
-    return { express: new BackendMcpClient("express", requireEnv("EXPRESS_MCP_URL")), rag };
+    return { express: new BackendMcpClient("express", requireEnv("EXPRESS_MCP_URL")), rag, legal };
   }
   const backends: HubBackends = {
     zabbix: new BackendMcpClient("zabbix", requireEnv("ZABBIX_MCP_URL")),
@@ -62,6 +64,7 @@ function createBackends(): HubBackends {
     zktime: new BackendMcpClient("zktime", requireEnv("ZKTIME_MCP_URL")),
     pstack: new BackendMcpClient("pstack", requireEnv("PSTACK_MCP_URL")),
     rag,
+    legal,
   };
   if (hostEnabled) {
     backends.host = new BackendMcpClient("host", requireEnv("HOST_MCP_URL"));
@@ -73,7 +76,7 @@ const backends = createBackends();
 
 function createServer(): McpServer {
   const server = new McpServer({ name, version: VERSION });
-  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite, hostEnabled);
+  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite, hostEnabled, legalEnabled);
   return server;
 }
 
@@ -92,6 +95,7 @@ log("info", "starting MCP hub", {
   accountingProduct,
   odooAllowWrite,
   rag: optionalEnv("RAG_MCP_URL"),
+  legalEnabled,
   hostEnabled,
   host: optionalEnv("HOST_MCP_URL"),
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),

@@ -96,6 +96,8 @@ services:
       ZKTIME_MCP_URL: http://sub-mcp-zktime:3000
       PSTACK_MCP_URL: http://sub-mcp-pstack:3000
       RAG_MCP_URL: http://sub-mcp-rag:3000
+      LEGAL_ENABLED: ${LEGAL_ENABLED:-false}
+      LEGAL_MCP_URL: http://sub-mcp-legal:3000
     expose:
       - "3000"
 
@@ -130,6 +132,8 @@ services:
       ZKTIME_MCP_URL: http://sub-mcp-zktime:3000
       PSTACK_MCP_URL: http://sub-mcp-pstack:3000
       RAG_MCP_URL: http://sub-mcp-rag:3000
+      LEGAL_ENABLED: ${LEGAL_ENABLED:-false}
+      LEGAL_MCP_URL: http://sub-mcp-legal:3000
       HOST_ENABLED: ${HOST_ENABLED:-false}
       HOST_MCP_URL: http://sub-mcp-host:3000
     expose:
@@ -163,6 +167,8 @@ services:
       ALLINONE_MCP_URL: http://sub-mcp-allinone:3000
       ODOO_MCP_URL: http://sub-mcp-odoo:3000
       RAG_MCP_URL: http://sub-mcp-rag:3000
+      LEGAL_ENABLED: ${LEGAL_ENABLED:-false}
+      LEGAL_MCP_URL: http://sub-mcp-legal:3000
     expose:
       - "3000"
 
@@ -330,6 +336,32 @@ services:
       PSTACK_BLOCKED_TOOLS: ${PSTACK_BLOCKED_TOOLS:-}
     expose:
       - "3000"
+
+  sub-mcp-legal:
+    profiles: [legal-poc]
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-legal
+    restart: unless-stopped
+    logging: *default-logging
+    networks: [infra-net]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      PORT: "3000"
+      LEGAL_INFERENCE_BACKEND: ${LEGAL_INFERENCE_BACKEND:-retrieval-only}
+      LEGAL_MODEL_URL: ${LEGAL_MODEL_URL:-}
+      LEGAL_MODEL_ID: ${LEGAL_MODEL_ID:-}
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   sub-mcp-rag:
     build:

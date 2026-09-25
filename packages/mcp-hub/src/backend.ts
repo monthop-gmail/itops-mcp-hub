@@ -11,12 +11,13 @@ export class BackendMcpClient {
   constructor(
     private readonly name: string,
     private readonly baseUrl: string,
+    private readonly timeoutMs?: number,
   ) {}
 
   async callTool(toolName: string, args: Record<string, unknown>): Promise<CallToolResult> {
     try {
       const client = await this.getClient();
-      const result = await client.callTool({ name: toolName, arguments: args });
+      const result = await client.callTool({ name: toolName, arguments: args }, undefined, this.timeoutMs ? { timeout: this.timeoutMs } : undefined);
       return result as CallToolResult;
     } catch (error) {
       log("warn", "backend tool call failed; resetting session", {
@@ -27,7 +28,7 @@ export class BackendMcpClient {
       await this.reset();
       try {
         const client = await this.getClient();
-        const result = await client.callTool({ name: toolName, arguments: args });
+        const result = await client.callTool({ name: toolName, arguments: args }, undefined, this.timeoutMs ? { timeout: this.timeoutMs } : undefined);
         return result as CallToolResult;
       } catch (retryError) {
         return errorResult(

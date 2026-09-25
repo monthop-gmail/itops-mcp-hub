@@ -252,6 +252,37 @@ else
   assert_no_host_tools "ACCOUNTING" "$(mcp_tool_names "$ACCOUNTING_TOKEN" "$ACCOUNTING_URL")"
 fi
 
+echo
+echo "== Legal tools stay off unless LEGAL_ENABLED =="
+LEGAL_FLAG="$(printf '%s' "${LEGAL_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')"
+if [ "$LEGAL_FLAG" = "true" ] || [ "$LEGAL_FLAG" = "1" ] || [ "$LEGAL_FLAG" = "yes" ]; then
+  for role in IT ADMIN ACCOUNTING; do
+    case "$role" in
+      IT) names="$(mcp_tool_names "$IT_TOKEN" "$IT_URL")" ;;
+      ADMIN) names="$(mcp_tool_names "$ADMIN_TOKEN" "$ADMIN_URL")" ;;
+      ACCOUNTING) names="$(mcp_tool_names "$ACCOUNTING_TOKEN" "$ACCOUNTING_URL")" ;;
+    esac
+    if printf '%s' "$names" | grep -Fq 'legal_search' && printf '%s' "$names" | grep -Fq 'legal_ask'; then
+      pass "$role tools/list includes legal_search and legal_ask"
+    else
+      fail "$role tools/list missing legal tools while LEGAL_ENABLED is on"
+    fi
+  done
+else
+  for role in IT ADMIN ACCOUNTING; do
+    case "$role" in
+      IT) names="$(mcp_tool_names "$IT_TOKEN" "$IT_URL")" ;;
+      ADMIN) names="$(mcp_tool_names "$ADMIN_TOKEN" "$ADMIN_URL")" ;;
+      ACCOUNTING) names="$(mcp_tool_names "$ACCOUNTING_TOKEN" "$ACCOUNTING_URL")" ;;
+    esac
+    if printf '%s' "$names" | grep -Fq 'legal_'; then
+      fail "$role tools/list must not include legal_* while LEGAL_ENABLED is off"
+    else
+      pass "$role tools/list has no legal_* (default off)"
+    fi
+  done
+fi
+
 SSE_HEADERS="$TMP_DIR/it_sse.headers"
 SSE_BODY="$TMP_DIR/it_sse.body"
 curl -sS -N --max-time 5 \

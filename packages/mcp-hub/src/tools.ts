@@ -30,6 +30,7 @@ export interface HubBackends {
   zktime?: BackendMcpClient;
   pstack?: BackendMcpClient;
   rag?: BackendMcpClient;
+  legal?: BackendMcpClient;
   host?: BackendMcpClient;
 }
 
@@ -40,6 +41,7 @@ export function registerHubTools(
   accountingProduct: AccountingProduct = "express",
   odooAllowWrite = false,
   hostEnabled = false,
+  legalEnabled = false,
 ): void {
   if (role === "accounting") {
     if (accountingProduct === "allinone") {
@@ -50,6 +52,7 @@ export function registerHubTools(
       registerExpressTools(server, requireBackend(backends.express, "express"));
     }
     registerRagTools(server, requireBackend(backends.rag, "rag"));
+    if (legalEnabled) registerLegalTools(server, requireBackend(backends.legal, "legal"));
     return;
   }
 
@@ -94,6 +97,7 @@ export function registerHubTools(
   registerZktimeTools(server, zktime);
   registerPstackTools(server, pstack);
   registerRagTools(server, requireBackend(backends.rag, "rag"));
+  if (legalEnabled) registerLegalTools(server, requireBackend(backends.legal, "legal"));
 
   if (role !== "admin") {
     return;
@@ -114,6 +118,18 @@ export function registerHubTools(
   }
 
   registerHostTools(server, requireBackend(backends.host, "host"));
+}
+
+function registerLegalTools(server: McpServer, legal: BackendMcpClient): void {
+  server.tool("legal_search", "Read-only legal evidence search; fixture POC", {
+    query: z.string().min(2).max(500),
+    as_of: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    limit: z.number().int().min(1).max(10).optional(),
+  }, async (args) => legal.callTool("legal_search", args));
+  server.tool("legal_ask", "Evidence-first legal draft requiring human review; fixture POC", {
+    question: z.string().min(2).max(1000),
+    as_of: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  }, async (args) => legal.callTool("legal_ask", args));
 }
 
 function registerHostTools(server: McpServer, host: BackendMcpClient): void {

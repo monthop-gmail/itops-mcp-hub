@@ -1,5 +1,5 @@
 {
-  "name": "@itops/mcp-hub",
+  "name": "@itops/mcp-legal",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "smoke": "node dist/smoke.js"
+    "smoke": "node dist/smoke.js",
+    "benchmark": "node dist/benchmark.js"
   },
   "dependencies": {
     "@itops/mcp-common": "*",
