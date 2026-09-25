@@ -58,6 +58,8 @@ async function main(): Promise<void> {
   } finally { globalThis.fetch = previousFetch; }
   const baseline = await runEval(new RetrievalOnly());
   assert(baseline.passed === 5 && baseline.failed === 0 && baseline.inference_errors === 0, "five-case retrieval baseline");
+  const firstCase = await runEval(new RetrievalOnly(), 1, undefined, undefined, ["current-10"]);
+  assert(firstCase.requests === 1 && firstCase.passed === 1 && firstCase.results[0].case === "current-10", "single-case paid gate selection");
   const mockEval = await runEval({ id: "mock-model", async generate(_question, evidence) {
     return { claims: [{ text: "fixture", evidence_ids: [evidence[0].evidence_id], quotes: [evidence[0].text] }], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } };
   } }, 2, 1, 2);

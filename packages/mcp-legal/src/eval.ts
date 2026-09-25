@@ -30,13 +30,17 @@ export function percentile(values: number[], p: number): number | null {
   return Math.round(sorted[Math.ceil(p * sorted.length) - 1] * 100) / 100;
 }
 
-export async function runEval(inference: LegalInference, repeats = 1, inputPerMillion?: number, outputPerMillion?: number) {
+export async function runEval(inference: LegalInference, repeats = 1, inputPerMillion?: number, outputPerMillion?: number, selectedCaseIds?: readonly string[]) {
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 10) throw new Error("LEGAL_BENCHMARK_REPEATS must be 1..10");
+  if (selectedCaseIds && (!selectedCaseIds.length || selectedCaseIds.some((id) => !cases.some((test) => test.id === id)))) {
+    throw new Error("Unknown or empty benchmark case selection");
+  }
+  const selectedCases = selectedCaseIds ? cases.filter((test) => selectedCaseIds.includes(test.id)) : cases;
   const retrievalOnly = inference.id === "retrieval-only";
   const service = new LegalService(inference);
   const results = [];
   for (let repeat = 1; repeat <= repeats; repeat++) {
-    for (const test of cases) {
+    for (const test of selectedCases) {
       const start = performance.now();
       const answer = await service.ask(test.question, asOf);
       const latencyMs = Math.round((performance.now() - start) * 100) / 100;
