@@ -11,13 +11,16 @@ export class RetrievalOnly implements LegalInference {
 export class OpenAiCompatibleLegal implements LegalInference {
   readonly id: string;
   private readonly chatUrl: URL;
-  constructor(baseUrl: string, private readonly model: string, private readonly timeoutMs = 120000, private readonly apiKey = "") {
+  constructor(baseUrl: string, private readonly model: string, private readonly timeoutMs = 120000, private readonly apiKey = "", private readonly options: { enableThinking?: boolean; maxTokens?: number } = {}) {
     const url = new URL(baseUrl);
     if ((url.protocol !== "https:" && !(url.protocol === "http:" && ["127.0.0.1", "localhost", "host.docker.internal"].includes(url.hostname))) ||
         url.username || url.password || url.search || url.hash) {
       throw new Error("LEGAL_MODEL_URL must be HTTPS or local HTTP, with no embedded credentials/query");
     }
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) throw new Error("LEGAL_MODEL_TIMEOUT_MS must be 1000..600000");
+    if (options.maxTokens !== undefined && (!Number.isInteger(options.maxTokens) || options.maxTokens < 1 || options.maxTokens > 8192)) {
+      throw new Error("LEGAL_MODEL_MAX_TOKENS must be 1..8192");
+    }
     const path = url.pathname.replace(/\/$/, "");
     url.pathname = `${path.endsWith("/v1") ? path : `${path}/v1`}/chat/completions`;
     this.chatUrl = url;
@@ -30,7 +33,8 @@ export class OpenAiCompatibleLegal implements LegalInference {
       signal: AbortSignal.timeout(this.timeoutMs),
       headers: { "content-type": "application/json", ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}) },
       body: JSON.stringify({
-        model: this.model, temperature: 0, max_tokens: 512,
+        model: this.model, temperature: 0, max_tokens: this.options.maxTokens ?? 512,
+        ...(this.options.enableThinking === undefined ? {} : { chat_template_kwargs: { enable_thinking: this.options.enableThinking } }),
         messages: [
           { role: "system", content: "Return JSON only: {\"claims\":[{\"text\":string,\"evidence_ids\":[string],\"quotes\":[string]}]}. Cite only supplied evidence IDs. Each quote must be an exact substring of its cited evidence. If insufficient, return {\"claims\":[]}. The corpus is fictional fixture data." },
           { role: "user", content: JSON.stringify({ question, evidence: evidence.map(({ evidence_id, law_name, section, text, version }) => ({ evidence_id, law_name, section, text, version })) }) },
@@ -56,7 +60,12 @@ export function createInference(env: NodeJS.ProcessEnv = process.env): LegalInfe
   if (backend === "retrieval-only") return new RetrievalOnly();
   if (backend === "openai-compatible") {
     if (!env.LEGAL_MODEL_URL || !env.LEGAL_MODEL_ID) throw new Error("LEGAL_MODEL_URL and LEGAL_MODEL_ID are required");
-    return new OpenAiCompatibleLegal(env.LEGAL_MODEL_URL, env.LEGAL_MODEL_ID, Number(env.LEGAL_MODEL_TIMEOUT_MS ?? 120000), env.LEGAL_MODEL_API_KEY ?? "");
+    const thinking = env.LEGAL_MODEL_ENABLE_THINKING?.trim() || undefined;
+    if (thinking !== undefined && thinking !== "true" && thinking !== "false") throw new Error("LEGAL_MODEL_ENABLE_THINKING must be true or false");
+    return new OpenAiCompatibleLegal(env.LEGAL_MODEL_URL, env.LEGAL_MODEL_ID, Number(env.LEGAL_MODEL_TIMEOUT_MS ?? 120000), env.LEGAL_MODEL_API_KEY ?? "", {
+      ...(thinking === undefined ? {} : { enableThinking: thinking === "true" }),
+      ...(env.LEGAL_MODEL_MAX_TOKENS?.trim() ? { maxTokens: Number(env.LEGAL_MODEL_MAX_TOKENS) } : {}),
+    });
   }
   throw new Error(`Unsupported LEGAL_INFERENCE_BACKEND: ${backend}`);
 }

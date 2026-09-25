@@ -40,19 +40,21 @@ async function main(): Promise<void> {
   let sentEvidence = false;
   let authenticated = false;
   let correctUrl = false;
+  let generationOptions = false;
   globalThis.fetch = (async (input, init) => {
-    const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
+    const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }>; max_tokens: number; chat_template_kwargs?: { enable_thinking: boolean } };
     sentEvidence = request.messages[1].content.includes(section10[0].evidence_id);
     authenticated = new Headers(init?.headers).get("authorization") === "Bearer test-token";
     correctUrl = String(input) === "https://cloud.example/openai/v1/chat/completions";
+    generationOptions = request.max_tokens === 2048 && request.chat_template_kwargs?.enable_thinking === false;
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ claims: [goodClaim] }) } }], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } }), {
       status: 200, headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
   try {
-    const model = new OpenAiCompatibleLegal("https://cloud.example/openai/v1", "fixture", 120000, "test-token");
+    const model = new OpenAiCompatibleLegal("https://cloud.example/openai/v1", "fixture", 120000, "test-token", { enableThinking: false, maxTokens: 2048 });
     const result = await model.generate("มาตรา 10", section10);
-    assert(sentEvidence && authenticated && correctUrl && result.claims[0].evidence_ids[0] === section10[0].evidence_id && result.usage?.total_tokens === 120, "cloud adapter URL/auth/evidence/usage");
+    assert(sentEvidence && authenticated && correctUrl && generationOptions && result.claims[0].evidence_ids[0] === section10[0].evidence_id && result.usage?.total_tokens === 120, "cloud adapter URL/auth/evidence/usage/options");
   } finally { globalThis.fetch = previousFetch; }
   const baseline = await runEval(new RetrievalOnly());
   assert(baseline.passed === 5 && baseline.failed === 0 && baseline.inference_errors === 0, "five-case retrieval baseline");
