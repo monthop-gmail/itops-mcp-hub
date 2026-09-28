@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
+  <rect width="800" height="1100" fill="white"/>
+  <g fill="#111" font-family="Noto Sans Thai, sans-serif" font-size="34">
+    <text x="110" y="160">ประกาศตัวอย่าง</text>
+    <text x="110" y="240">เลขที่ ๗/๒๕๖๙</text>
+    <text x="110" y="320">วันที่ ๒๘ กันยายน ๒๕๖๙</text>
+    <text x="110" y="400">วงเงิน 12,500 บาท</text>
+  </g>
+</svg>
