@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
   <rect width="800" height="1100" fill="white"/>
   <g stroke="#555" fill="none" stroke-width="2"><rect x="80" y="120" width="640" height="240"/><path d="M80 200H720 M80 280H720 M400 120V360 M550 120V360"/></g>
-  <g fill="#111" font-family="Noto Sans Thai, sans-serif" font-size="31">
+  <g fill="#111" font-family="Loma" font-size="31">
     <text x="100" y="175">รายการ</text><text x="420" y="175">จำนวน</text><text x="570" y="175">ราคา</text>
     <text x="100" y="255">กระดาษ</text><text x="420" y="255">2</text><text x="570" y="255">100</text>
     <text x="100" y="335">หมึก</text><text x="420" y="335">1</text><text x="570" y="335">500</text>

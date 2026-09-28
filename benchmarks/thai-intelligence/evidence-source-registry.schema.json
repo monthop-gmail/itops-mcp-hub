@@ -1,23 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/monthop-gmail/itops-mcp-hub/benchmarks/thai-intelligence/evidence-source-registry.schema.json",
-  "title": "Thai Intelligence Evidence Source Registry v0.1",
+  "title": "Thai Intelligence Evidence Source Registry v0.2",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "sources"],
   "properties": {
-    "schema_version": { "const": "0.1" },
+    "schema_version": { "const": "0.2" },
     "sources": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "authority", "uri", "document_id", "jurisdiction", "retrieved_at", "sha256", "access_class", "rights", "status"],
+        "required": ["id", "authority", "uri", "document_id", "source_revision", "jurisdiction", "retrieved_at", "sha256", "access_class", "rights", "status"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "authority": { "type": "string", "minLength": 1 },
           "uri": { "type": "string", "minLength": 1 },
           "document_id": { "type": "string", "minLength": 1 },
+          "source_revision": { "type": "string", "minLength": 1 },
+          "supersedes": { "type": ["string", "null"] },
+          "superseded_by": { "type": ["string", "null"] },
           "jurisdiction": { "type": "string", "minLength": 1 },
           "issued_on": { "type": ["string", "null"], "format": "date" },
           "effective_from": { "type": ["string", "null"], "format": "date" },

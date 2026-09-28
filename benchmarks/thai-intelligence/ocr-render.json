@@ -1,0 +1,11 @@
+{
+  "schema_version": "0.2",
+  "status": "not_rendered",
+  "renderer": { "package": "@resvg/resvg-js", "version": "2.6.2" },
+  "render": { "format": "png", "width_px": 800, "height_px": 1100, "scale": 1, "background": "#ffffff", "font_family": "Loma" },
+  "font": { "path_on_reference_host": "/usr/share/fonts/opentype/tlwg/Loma.otf", "sha256": "e14126fe603116a6da8fb54822e8521589983d17d78cae489e98faed4b2f4cd2" },
+  "rendered_images": [
+    { "source": "pages/notice.svg", "png_sha256": null },
+    { "source": "pages/table.svg", "png_sha256": null }
+  ]
+}

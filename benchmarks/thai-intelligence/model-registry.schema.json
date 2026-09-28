@@ -1,18 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/monthop-gmail/itops-mcp-hub/benchmarks/thai-intelligence/model-registry.schema.json",
-  "title": "Thai Intelligence Model Registry v0.1",
+  "title": "Thai Intelligence Model Registry v0.2",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "models"],
   "properties": {
-    "schema_version": { "const": "0.1" },
+    "schema_version": { "const": "0.2" },
     "models": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "developer", "revision", "artifact_sha256", "roles", "modality", "license", "deployment", "evidence_status", "approval_status"],
+        "required": ["id", "developer", "revision", "artifact_sha256", "roles", "modality", "license", "deployment", "tokenizer_revision", "chat_template_sha256", "decoding_config_sha256", "serving_stack", "evidence_status", "approval_status"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "developer": { "type": "string", "minLength": 1 },
@@ -26,7 +26,16 @@
           "api_contract": { "type": ["string", "null"] },
           "requires_remote_code": { "type": ["boolean", "null"] },
           "tokenizer_revision": { "type": ["string", "null"] },
+          "chat_template_revision": { "type": ["string", "null"] },
+          "chat_template_sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
           "processor_revision": { "type": ["string", "null"] },
+          "decoding_config_ref": { "type": ["string", "null"] },
+          "decoding_config_sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+          "serving_stack": {
+            "type": "object", "additionalProperties": false,
+            "required": ["name", "version"],
+            "properties": { "name": { "type": ["string", "null"] }, "version": { "type": ["string", "null"] } }
+          },
           "tested_context_tokens": { "type": ["integer", "null"], "minimum": 1 },
           "tested_vram_gib": { "type": ["number", "null"], "minimum": 0 },
           "data_residency": { "type": ["string", "null"] },
@@ -35,7 +44,18 @@
           "known_failures": { "type": "array", "items": { "type": "string" } },
           "approval_status": { "enum": ["candidate", "benchmarked", "approved", "rejected"] },
           "rollback_to": { "type": ["string", "null"] }
-        }
+        },
+        "allOf": [{
+          "if": { "properties": { "approval_status": { "const": "approved" } }, "required": ["approval_status"] },
+          "then": {
+            "properties": {
+              "artifact_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "chat_template_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "decoding_config_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "serving_stack": { "properties": { "name": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 } } }
+            }
+          }
+        }]
       }
     }
   }
