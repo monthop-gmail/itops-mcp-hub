@@ -1,0 +1,48 @@
+name: itops-host-fixture-poc
+
+# Isolated two-service trial. No host mounts, published ports, or tunnel.
+services:
+  sub-mcp-host-fixture:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-host
+    environment:
+      PORT: "3000"
+      HOST_BACKEND: fixture
+      HOST_AUDIT_DIR: /tmp/host-audit
+    networks: [fixture-net]
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  mcp-hub-host-fixture:
+    build:
+      context: .
+      dockerfile: packages/Dockerfile
+      args:
+        SERVICE: mcp-hub
+    environment:
+      HUB_ROLE: admin
+      HUB_PROFILE: host_only
+      HOST_ENABLED: "true"
+      HOST_MCP_URL: http://sub-mcp-host-fixture:3000
+      PORT: "3000"
+    depends_on:
+      sub-mcp-host-fixture:
+        condition: service_healthy
+    networks: [fixture-net]
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+networks:
+  fixture-net:
+    internal: true

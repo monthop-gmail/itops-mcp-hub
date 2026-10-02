@@ -34,6 +34,11 @@ export interface HubBackends {
   host?: BackendMcpClient;
 }
 
+/** Isolated admin-only host profile; does not construct unrelated backend clients. */
+export function registerHostOnlyTools(server: McpServer, backends: HubBackends): void {
+  registerHostTools(server, requireBackend(backends.host, "host"));
+}
+
 export function registerHubTools(
   server: McpServer,
   backends: HubBackends,

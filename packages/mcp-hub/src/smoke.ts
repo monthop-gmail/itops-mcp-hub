@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BackendMcpClient } from "./backend.js";
-import { registerHubTools, type HubBackends, type HubRole } from "./tools.js";
+import { registerHostOnlyTools, registerHubTools, type HubBackends, type HubRole } from "./tools.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 
@@ -41,3 +41,19 @@ for (const role of ["it", "admin", "accounting"] as const) {
   assert(githubOn.includes("rag_ingest_github_repo") === (role === "admin"), `${role} GitHub ingest admin-only`);
 }
 console.log("hub role legal/GitHub visibility/default-off smoke ok");
+
+const fakeHost = { async callTool() { throw new Error("not used in tools/list"); } } as unknown as BackendMcpClient;
+const hostServer = new McpServer({ name: "host-only-smoke", version: "1" });
+registerHostOnlyTools(hostServer, { host: fakeHost });
+const hostClient = new Client({ name: "host-only-smoke", version: "1" });
+const [hostServerTransport, hostClientTransport] = InMemoryTransport.createLinkedPair();
+try {
+  await hostServer.connect(hostServerTransport);
+  await hostClient.connect(hostClientTransport);
+  const names = (await hostClient.listTools()).tools.map((tool) => tool.name).sort();
+  assert(JSON.stringify(names) === JSON.stringify(["host_get_status", "host_list", "host_read", "host_search", "host_stat"].sort()), "host-only profile tools");
+} finally {
+  await hostClient.close();
+  await hostServer.close();
+}
+console.log("hub host-only profile visibility smoke ok");
