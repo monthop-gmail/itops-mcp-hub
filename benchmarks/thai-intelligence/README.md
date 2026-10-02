@@ -32,7 +32,7 @@ node benchmarks/thai-intelligence/trial.mjs \
   --output .scratchpad/thai-replay-$(date +%s).json
 ```
 
-The replay's nine passing answers are hand-authored **synthetic harness checks**, not model-quality evidence. Reports go to the ignored, persistent `.scratchpad/` folder by default in these examples. The script creates the output with mode 600 and refuses to overwrite an existing report.
+The replay's nine passing answers are hand-authored **synthetic harness checks**, not model-quality evidence. Its placeholder metadata is refused for live endpoints. Reports go to the ignored, persistent `.scratchpad/` folder by default in these examples. The script creates the output with mode 600 and refuses to overwrite an existing report.
 
 A later approved model trial uses one OpenAI-compatible `/v1/chat/completions` endpoint and a metadata JSON containing `model`, immutable `model_revision`, `tokenizer_revision`, `artifact_sha256`, `chat_template_sha256`, `serving_stack`, and `decoding` (`temperature`, `max_tokens`). For a local-only server:
 
@@ -43,6 +43,6 @@ node benchmarks/thai-intelligence/trial.mjs \
   --output .scratchpad/thai-model-$(date +%s).json
 ```
 
-No local inference command is run by this repository. For an external HTTPS endpoint, an owner must separately approve the provider, data handling, license, spending cap, and exact model; only then set `MODEL_TRIAL_OWNER_APPROVED=true`. If authentication is needed, supply `MODEL_TRIAL_API_KEY` through a secret mechanism, never a URL, CLI argument, report, git or chat. The flag is a deliberate execution gate, **not** proof of account-level budget enforcement. Provider billing must be checked separately. Do not run paid endpoints just because this harness exists. Only synthetic fixture content is in requests; no real legal corpus, restricted data or production side effects belong in this trial.
+No local inference command is run by this repository. For an external HTTPS endpoint, an owner must separately approve the provider, data handling, license, spending cap, and exact model; only then set `MODEL_TRIAL_OWNER_APPROVED=true`. If authentication is needed, supply `MODEL_TRIAL_API_KEY` through a secret mechanism, never a URL, CLI argument, report, git or chat. The flag is a deliberate execution gate, **not** proof of account-level budget enforcement. Provider billing and GPU/worker usage must be checked separately; the client cannot measure them. Do not run paid endpoints just because this harness exists. Only synthetic fixture content is in requests; no real legal corpus, restricted data or production side effects belong in this trial.
 
 The first `icb-serv` CPU feasibility attempt and its incomplete coverage are recorded in [icb-serv-cpu-2026-10-02.md](./icb-serv-cpu-2026-10-02.md). It does not establish model quality. A GPU-backed or substantially smaller-model run remains the next inference gate; the OpenThai Legal Modal path is a different candidate and is unresolved.

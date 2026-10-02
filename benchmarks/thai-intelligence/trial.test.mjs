@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -81,6 +81,11 @@ test("CLI offline replay runs all nine cases", async () => {
   assert.equal(report.transport, "offline_replay");
 });
 
+test("CLI rejects synthetic metadata for live inference", async () => {
+  const folder = await mkdtemp(join(tmpdir(), "thai-trial-gate-"));
+  await assert.rejects(() => execFileAsync(process.execPath, [join(here, "trial.mjs"), "--metadata", join(here, "replay-model.json"), "--endpoint", "http://127.0.0.1:11435/v1/chat/completions", "--output", join(folder, "report.json")]), /Synthetic replay metadata/);
+});
+
 test("CLI runs all nine cases through a loopback mock endpoint", async (t) => {
   let index = 0;
   const server = createServer(async (request, response) => {
@@ -111,7 +116,9 @@ test("CLI runs all nine cases through a loopback mock endpoint", async (t) => {
   try {
     const folder = await mkdtemp(join(tmpdir(), "thai-trial-test-"));
     const output = join(folder, "report.json");
-    await execFileAsync(process.execPath, [join(here, "trial.mjs"), "--metadata", join(here, "replay-model.json"), "--endpoint", `http://127.0.0.1:${server.address().port}/v1/chat/completions`, "--output", output]);
+    const mockMetadata = join(folder, "model.json");
+    await writeFile(mockMetadata, JSON.stringify({ ...metadata, evidence_status: "local_mock_test" }));
+    await execFileAsync(process.execPath, [join(here, "trial.mjs"), "--metadata", mockMetadata, "--endpoint", `http://127.0.0.1:${server.address().port}/v1/chat/completions`, "--output", output]);
     const report = JSON.parse(await readFile(output));
     assert.equal(report.complete, true);
     assert.equal(index, 9);

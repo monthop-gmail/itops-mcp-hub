@@ -23,6 +23,7 @@ const fixtureBytes = await readFile(join(here, "fixtures.json"));
 const fixtures = JSON.parse(fixtureBytes.toString("utf8"));
 const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
 const model = metadata.model;
+if (endpoint && metadata.evidence_status === "synthetic_harness_check_only") throw new Error("Synthetic replay metadata cannot be used for a live endpoint");
 let invoke;
 let transport;
 if (replayPath) {
@@ -60,6 +61,7 @@ const report = await runTrial({ fixtures, fixtureBytes, model, metadata, invoke,
 report.transport = transport;
 report.cost_usd = transport === "offline_replay" || transport === "local_openai_compatible" ? 0 : null;
 report.cost_note = transport === "approved_remote_openai_compatible" ? "Provider billing must be checked separately; token usage is not an invoice" : null;
+report.resource_measurement = transport === "offline_replay" ? "not_applicable" : "not_collected_by_client; record provider GPU/worker metrics or local model-process RSS separately";
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
 process.stdout.write(`Wrote ${outputPath}: ${JSON.stringify(report.counts)}; complete=${report.complete}\n`);
 if (!report.complete || report.counts.fail) process.exitCode = 1;
