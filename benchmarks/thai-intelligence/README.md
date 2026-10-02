@@ -18,4 +18,31 @@ For any later model run, score each lane separately: language/intent exact-match
 
 `model-registry.schema.json` records candidates, immutable revisions/checksums, role, modality, license/terms, deployment/data residency, tokenizer **and chat-template hash**, decoding config hash, serving-stack version, publisher-vs-reproduced evidence and approval state. Null compatibility fields mean **not checked**, not compatible. `evidence-source-registry.schema.json` is separate: source authority, document ID plus canonical revision (independent of retrieval time and content hash), supersession links, date/span/hash/rights. Never treat a model card or model output as an evidence source for factual claims. Tool fixtures now include typed parameter schemas and exact expected arguments; no-call cases expect null arguments and no side effect.
 
-Smallest next trial after reviewing baseline: run **one** approved local/hosted model against `tool-01`–`tool-04` and `fact-01`–`fact-02`, with side effects mocked and no restricted data. Pin model revision, tokenizer/chat template, prompt/decoding, request/response hashes, latency and any cost. Do not infer permission to use a paid endpoint from this plan. For legal trials, require source-verified section/date checks and owner approval separately; the OpenThai Legal Modal path is unresolved.
+## Nine-case model trial (no GPU required to prepare)
+
+`trial.mjs` covers **all four** tool cases and **all five** dated-fact cases. It never executes a tool; the tool definitions are only sent to a model or replayed. It scores exact tool name/arguments, no-call safety, JSON answer and exact source IDs. For prompt-injection and approval cases, a structural no-call pass still carries `semantic_review_required: true`; a human must inspect the response for false claims or unsafe advice. The report includes every case, request/response SHA-256, raw response, latency, usage if provided, and explicit `not_tested` rows after the two-timeout stop rule. `complete` means every case returned without transport error or timeout; it is **not** a quality pass. Any failed case makes the command exit nonzero.
+
+Verify the harness offline, without a model, network or GPU:
+
+```sh
+node --test benchmarks/thai-intelligence/trial.test.mjs
+node benchmarks/thai-intelligence/trial.mjs \
+  --metadata benchmarks/thai-intelligence/replay-model.json \
+  --replay benchmarks/thai-intelligence/replay-synthetic.json \
+  --output .scratchpad/thai-replay-$(date +%s).json
+```
+
+The replay's nine passing answers are hand-authored **synthetic harness checks**, not model-quality evidence. Its placeholder metadata is refused for live endpoints. Reports go to the ignored, persistent `.scratchpad/` folder by default in these examples. The script creates the output with mode 600 and refuses to overwrite an existing report.
+
+A later approved model trial uses one OpenAI-compatible `/v1/chat/completions` endpoint and a metadata JSON containing `model`, immutable `model_revision`, `tokenizer_revision`, `artifact_sha256`, `chat_template_sha256`, `serving_stack`, and `decoding` (`temperature`, `max_tokens`). For a local-only server:
+
+```sh
+node benchmarks/thai-intelligence/trial.mjs \
+  --metadata /path/to/pinned-model-metadata.json \
+  --endpoint http://127.0.0.1:PORT/v1/chat/completions \
+  --output .scratchpad/thai-model-$(date +%s).json
+```
+
+No local inference command is run by this repository. For an external HTTPS endpoint, an owner must separately approve the provider, data handling, license, spending cap, and exact model; only then set `MODEL_TRIAL_OWNER_APPROVED=true`. If authentication is needed, supply `MODEL_TRIAL_API_KEY` through a secret mechanism, never a URL, CLI argument, report, git or chat. The flag is a deliberate execution gate, **not** proof of account-level budget enforcement. Provider billing and GPU/worker usage must be checked separately; the client cannot measure them. Do not run paid endpoints just because this harness exists. Only synthetic fixture content is in requests; no real legal corpus, restricted data or production side effects belong in this trial.
+
+The first `icb-serv` CPU feasibility attempt and its incomplete coverage are recorded in [icb-serv-cpu-2026-10-02.md](./icb-serv-cpu-2026-10-02.md). It does not establish model quality. A GPU-backed or substantially smaller-model run remains the next inference gate; the OpenThai Legal Modal path is a different candidate and is unresolved.
