@@ -15,6 +15,26 @@ Scope: study only; no production routing, migration, or new cloud resources. `mc
 
 Evidence: `packages/mcp-hub/src/{index,tools}.ts`, `packages/mcp-host/src/{index,jail,store,audit}.ts`, `packages/mcp-rag/src/{corpus,extract}.ts`, `docker-compose.yml`, `docs/HOST.md`, `docs/RAG.md`.
 
+Package-level inventory (the registration gates below are code gates; a running container alone does not expose a tool):
+
+| Package | Hub role / gate | Principal dependency |
+| --- | --- | --- |
+| `mcp-common` | shared by all; no tools | Node HTTP/MCP utilities |
+| `mcp-hub` | three role-specific instances (`HUB_ROLE`) | internal MCP backend URLs; currently IT/admin require Zabbix, MeshCentral, ZKTime, pstack, RAG, while accounting requires one selected accounting backend plus RAG |
+| `mcp-zabbix` | IT/admin | Zabbix API/site network |
+| `mcp-meshcentral` | IT/admin; shell registered admin only | MeshCentral API/site network |
+| `mcp-zktime` | IT/admin | ZKTime site data/API |
+| `mcp-pstack` | IT/admin | pstack API/config |
+| `mcp-express` | accounting when `ACCOUNTING_PRODUCT=express` | Express data source |
+| `mcp-allinone` | accounting when `ACCOUNTING_PRODUCT=allinone` | Allinone data source |
+| `mcp-odoo` | accounting when `ACCOUNTING_PRODUCT=odoo`; write separately gated by `ODOO_ALLOW_WRITE` | Odoo API |
+| `mcp-rag` | all three roles; GitHub import admin-only opt-in | mounted docs/SQLite/PDF utilities; public GitHub API only when import is explicitly called |
+| `mcp-legal` | all three roles only with `LEGAL_ENABLED=true` | fixture or configured model provider |
+| `mcp-host` | admin only with `HOST_ENABLED=true` | `:ro` mounted local FS or fixture; local audit path |
+| `mcp-oauth` | shared edge OAuth/DCR | Nginx/public-origin configuration and bearer roles |
+
+Dependency isolation: `mcp-host` itself can run in fixture mode without Zabbix/pstack/RAG, but the **current admin hub** still constructs those clients and Compose `depends_on` waits for them. Thus making just `sub-mcp-host` optional does not yet create a reduced admin deployment; a profile/overlay must update hub backend construction and dependencies together. `mcp-host` does not need RAG's SQLite or PDF utilities. Conversely, `sub-mcp-rag` needs neither a host mount nor MeshCentral but does need its own persisted index volume in files mode. Nginx bearer/OAuth RBAC remains the outer privileged boundary in every profile.
+
 ## Selective deployment options
 
 | Option | What changes | Recommendation |
