@@ -1,0 +1,10 @@
+{
+  "model": "synthetic-replay-not-a-model",
+  "model_revision": "synthetic-fixture-v0.1",
+  "tokenizer_revision": "synthetic-not-applicable",
+  "artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "chat_template_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "serving_stack": "offline synthetic replay v0.1",
+  "decoding": { "temperature": 0, "max_tokens": 256 },
+  "evidence_status": "synthetic_harness_check_only"
+}
