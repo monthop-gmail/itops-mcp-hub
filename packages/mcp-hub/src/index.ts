@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { log, optionalEnv, requireEnv, serveMcpHttp } from "@itops/mcp-common";
 import { BackendMcpClient } from "./backend.js";
-import { registerHubTools, type AccountingProduct, type HubBackends, type HubRole } from "./tools.js";
+import { registerHostOnlyTools, registerHubTools, type AccountingProduct, type HubBackends, type HubRole } from "./tools.js";
 
 const VERSION = "1.0.0";
 
@@ -46,8 +46,19 @@ function envFlag(name: string, fallback = false): boolean {
 const hostEnabled = role === "admin" && envFlag("HOST_ENABLED", false);
 const legalEnabled = envFlag("LEGAL_ENABLED", false);
 const githubIngestEnabled = role === "admin" && envFlag("RAG_GITHUB_INGEST_ENABLED", false);
+const hubProfile = optionalEnv("HUB_PROFILE", "full");
+if (hubProfile !== "full" && hubProfile !== "host_only") {
+  throw new Error("HUB_PROFILE must be full or host_only");
+}
+const hostOnly = hubProfile === "host_only";
+if (hostOnly && (!hostEnabled || role !== "admin")) {
+  throw new Error("HUB_PROFILE=host_only requires HUB_ROLE=admin and HOST_ENABLED=true");
+}
 
 function createBackends(): HubBackends {
+  if (hostOnly) {
+    return { host: new BackendMcpClient("host", requireEnv("HOST_MCP_URL")) };
+  }
   const rag = new BackendMcpClient("rag", requireEnv("RAG_MCP_URL"));
   const legal = legalEnabled ? new BackendMcpClient("legal", requireEnv("LEGAL_MCP_URL"), 180000) : undefined;
   if (role === "accounting") {
@@ -77,7 +88,11 @@ const backends = createBackends();
 
 function createServer(): McpServer {
   const server = new McpServer({ name, version: VERSION });
-  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite, hostEnabled, legalEnabled, githubIngestEnabled);
+  if (hostOnly) {
+    registerHostOnlyTools(server, backends);
+  } else {
+    registerHubTools(server, backends, role, accountingProduct, odooAllowWrite, hostEnabled, legalEnabled, githubIngestEnabled);
+  }
   return server;
 }
 
@@ -98,6 +113,7 @@ log("info", "starting MCP hub", {
   rag: optionalEnv("RAG_MCP_URL"),
   legalEnabled,
   hostEnabled,
+  hostOnly,
   host: optionalEnv("HOST_MCP_URL"),
   publicBasePath: optionalEnv("MCP_PUBLIC_BASE_PATH"),
 });

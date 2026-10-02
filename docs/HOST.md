@@ -4,6 +4,21 @@
 ต้นทางที่ดู: [wonderwhy-er/DesktopCommanderMCP](https://github.com/wonderwhy-er/DesktopCommanderMCP) (MIT, npm `@wonderwhy-er/desktop-commander`)  
 กระทู้: `dis-58a707ef` seq 60–62 · ใบ `dec-ae0c1eda` · แผน `plan-f762e198`
 
+## Selective deployment fixture POC (ไม่ใช่ production)
+
+`compose.host-fixture.yml` เป็น Compose project แยก `itops-host-fixture-poc` ที่สร้างเพียง `sub-mcp-host-fixture` และ `mcp-hub-host-fixture`. ฮับตั้ง `HUB_PROFILE=host_only`, `HUB_ROLE=admin`, `HOST_ENABLED=true`; ลงทะเบียนเฉพาะห้า `host_*` tools และไม่ต้องตั้ง URL ของ Zabbix/Mesh/RAG/pstack. โหมด `HOST_BACKEND=fixture` เท่านั้นในไฟล์ทดลองนี้ ไม่มี host volume, ไม่มี published port, ไม่มี Cloudflare Tunnel/Nginx, network เป็น internal. **ห้ามเพิ่ม `ports:` หรือเปิดอินเทอร์เน็ตโดยไม่มีชั้น Bearer/OAuth เดิม**. Compose หลักและค่าเริ่ม `HUB_PROFILE=full` ไม่เปลี่ยน.
+
+ทดลองบนเครื่อง dev ที่มี Docker (ไม่ใช้ข้อมูลไซต์จริง):
+
+```bash
+docker compose -f compose.host-fixture.yml config --services
+docker compose -f compose.host-fixture.yml up -d --build
+docker compose -f compose.host-fixture.yml exec -T mcp-hub-host-fixture node dist/host-fixture-smoke.js
+docker compose -f compose.host-fixture.yml down
+```
+
+ผลที่ต้องได้: มีสอง service เท่านั้น; `tools/list` มีเฉพาะ `host_get_status/list/stat/read/search`; `host_read` ของ fixture ได้ข้อความ, `.env` ถูกปฏิเสธ. `down` ลบเฉพาะคอนเทนเนอร์/network ของ project ทดลอง ไม่มี volume ข้อมูลจริง. การเปิด host-only กับ filesystem จริงหรือ public endpoint เป็นงานคนละรอบและต้องทบทวน RBAC/audit ก่อน.
+
 ฮับนี้ไม่ใช่ desktop ของคนนั่งเครื่องเดียว มันคือ Docker Compose ที่เปิด `/mcp/admin` ออกอินเทอร์เน็ตผ่าน Cloudflare Tunnel  
 จึง **ไม่นำแพ็กเกจต้นทางมาฝัง** และไม่เปิดเชลล์บนโฮสต์จนกว่า `meshcentral_run_shell` จะมีชั้นอนุมัติเดียวกัน
 
