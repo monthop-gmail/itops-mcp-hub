@@ -236,11 +236,12 @@ export class RagCorpus {
       `SELECT c.path, c.title, COUNT(*) AS chunk_count, SUM(LENGTH(c.text)) AS bytes,
               g.repo, g.repo_path, g.commit_sha
        FROM chunks c LEFT JOIN github_sources g ON g.path = c.path
-       WHERE (? = '' OR c.path LIKE ?)
+       WHERE g.repo IS ${isGithubPrefix(prefix) ? "NOT " : ""}NULL
+         AND (? = '' OR substr(c.path, 1, length(?)) = ?)
        GROUP BY c.path, c.title
        ORDER BY c.path
        LIMIT ?`,
-    ).all(prefix, prefix ? `${prefix}%` : "", limit) as Array<{
+    ).all(prefix, prefix, prefix, limit) as Array<{
       path: string;
       title: string;
       chunk_count: number;
@@ -255,7 +256,7 @@ export class RagCorpus {
       ext: extOf(row.path),
       bytes: Number(row.bytes) || 0,
       chunk_count: Number(row.chunk_count) || 0,
-      ...(row.repo ? { github: { repo: row.repo, path: row.repo_path!, commit: row.commit_sha! } } : {}),
+      ...(row.repo ? { github: githubProvenance(row.repo, row.repo_path!, row.commit_sha!) } : {}),
     }));
   }
 
@@ -280,7 +281,7 @@ export class RagCorpus {
     }
   }
 
-  getChunk(id: number): RagChunk | null {
+  getChunk(id: number, pathPrefix?: string): RagChunk | null {
     this.requireReady();
     const row = this.db!.prepare(`SELECT c.id, c.path, c.title, c.page, c.text,
       g.repo, g.repo_path, g.commit_sha FROM chunks c
@@ -288,8 +289,10 @@ export class RagCorpus {
       id,
     ) as (RagChunk & { repo: string | null; repo_path: string | null; commit_sha: string | null }) | undefined;
     if (!row) return null;
+    const prefix = (pathPrefix ?? "").replaceAll("\\", "/");
+    if (Boolean(row.repo) !== isGithubPrefix(prefix) || (prefix && !row.path.startsWith(prefix))) return null;
     const { repo, repo_path, commit_sha, ...chunk } = row;
-    return { ...chunk, ...(repo ? { github: { repo, path: repo_path!, commit: commit_sha! } } : {}) };
+    return { ...chunk, ...(repo ? { github: githubProvenance(repo, repo_path!, commit_sha!) } : {}) };
   }
 
   indexGithubSnapshot(snapshot: GithubSnapshot): { repo: string; commit: string; files: number; chunks: number; skipped: number } {
@@ -699,7 +702,8 @@ export class RagCorpus {
       JOIN chunks c ON c.id = chunks_fts.rowid
       LEFT JOIN github_sources g ON g.path = c.path
       WHERE chunks_fts MATCH ?
-        AND (? = '' OR c.path LIKE ?)
+        AND g.repo IS ${isGithubPrefix(prefix) ? "NOT " : ""}NULL
+        AND (? = '' OR substr(c.path, 1, length(?)) = ?)
         ${likeSql}
       ORDER BY rank ASC, c.path ASC
       LIMIT ?
@@ -707,7 +711,8 @@ export class RagCorpus {
     const rows = this.db!.prepare(sql).all(
       prepared.match,
       prefix,
-      prefix ? `${prefix}%` : "",
+      prefix,
+      prefix,
       ...prepared.likes,
       limit,
     ) as Array<{
@@ -734,11 +739,12 @@ export class RagCorpus {
              g.repo, g.repo_path, g.commit_sha
       FROM chunks c LEFT JOIN github_sources g ON g.path = c.path
       WHERE ${likeSql.replaceAll("text LIKE", "c.text LIKE")}
-        AND (? = '' OR c.path LIKE ?)
+        AND g.repo IS ${isGithubPrefix(prefix) ? "NOT " : ""}NULL
+        AND (? = '' OR substr(c.path, 1, length(?)) = ?)
       ORDER BY c.path ASC
       LIMIT ?
     `;
-    const rows = this.db!.prepare(sql).all(...likes, prefix, prefix ? `${prefix}%` : "", limit) as Array<{
+    const rows = this.db!.prepare(sql).all(...likes, prefix, prefix, prefix, limit) as Array<{
       id: number;
       path: string;
       title: string;
@@ -791,8 +797,16 @@ function toHit(
     page: row.page,
     score: Number.isFinite(rank) ? -rank : 0,
     excerpt: excerptAround(row.text, query),
-    ...(row.repo ? { github: { repo: row.repo, path: row.repo_path!, commit: row.commit_sha! } } : {}),
+    ...(row.repo ? { github: githubProvenance(row.repo, row.repo_path!, row.commit_sha!) } : {}),
   };
+}
+
+function isGithubPrefix(prefix: string): boolean {
+  return prefix.startsWith("github/");
+}
+
+function githubProvenance(repo: string, path: string, commit: string) {
+  return { repo, path, commit, trust: "untrusted_external" as const, usage: "evidence_not_instructions" as const };
 }
 
 function assertFts5(db: SqliteDatabase): void {

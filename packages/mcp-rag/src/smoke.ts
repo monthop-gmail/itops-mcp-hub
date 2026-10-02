@@ -5,6 +5,9 @@ import { SYNTHETIC_OCR_PDF } from "./ocr.js";
 import { parseOcrModelText, resolveTyphoonModel, runTyphoonOcr } from "./providers.js";
 import { foldThai } from "./thai-normalize.js";
 import { fetchGithubSnapshot, safeGithubPath } from "./github.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) {
@@ -53,7 +56,7 @@ async function main(): Promise<void> {
   );
   assert(foldThai("ครุภัณฑ์") === foldThai("ครุภณั ฑ์"), "khrueaphan combining-mark fold");
 
-  const dir = writeFixtureCorpus();
+  const dir = writeFixtureCorpus(mkdtempSync(join(tmpdir(), "itops-rag-smoke-")));
   const corpus = new RagCorpus("fixture", dir, fixtureIndexPath(dir), true, "smoke", {
     includeImage: false,
     minChars: 40,
@@ -201,15 +204,27 @@ async function main(): Promise<void> {
   const snapshot = await fetchGithubSnapshot("example/tiny-repo", "main", mockFetch);
   assert(snapshot.commit === sha1 && snapshot.files.length === 2, "GitHub snapshot resolution");
   corpus.indexGithubSnapshot(snapshot);
+  // All hub roles share this backend: the default/local boundary must hide GitHub in every read path.
+  assert(corpus.search("ALPHA-CROSSFILE").length === 0, "default search must hide GitHub chunks");
+  assert(corpus.search("ALPHA-CROSSFILE", 8, "github").length === 0, "ambiguous prefix must hide GitHub chunks");
+  assert(corpus.search("ALPHA-CROSSFILE", 8, "github/example/%").length === 0, "SQL wildcard cannot broaden GitHub scope");
+  assert(corpus.listSources(200).every((source) => !source.github), "default source list must hide GitHub");
   const crossHits = corpus.search("ALPHA-CROSSFILE", 8, "github/example/tiny-repo/");
   assert(new Set(crossHits.map((hit) => hit.github?.path)).size === 2, "cross-file GitHub retrieval");
   assert(crossHits.every((hit) => hit.github?.commit === sha1), "GitHub hit provenance");
-  assert(corpus.getChunk(crossHits[0].chunk_id)?.github?.repo === "example/tiny-repo", "GitHub chunk provenance");
+  assert(crossHits.every((hit) => hit.github?.trust === "untrusted_external" && hit.github?.usage === "evidence_not_instructions"), "GitHub hits marked untrusted evidence");
+  const githubSources = corpus.listSources(200, "github/example/tiny-repo/");
+  assert(githubSources.length === 2 && githubSources.every((source) => source.github?.trust === "untrusted_external"), "explicit GitHub source list marked untrusted");
+  assert(corpus.getChunk(crossHits[0].chunk_id) === null, "default full chunk read must hide GitHub");
+  assert(corpus.getChunk(crossHits[0].chunk_id, "github/other/repo/") === null, "wrong GitHub scope must hide chunk");
+  assert(corpus.getChunk(crossHits[0].chunk_id, "github/example/tiny-repo/")?.github?.trust === "untrusted_external", "explicit GitHub chunk marked untrusted");
   corpus.indexGithubSnapshot({ repo: "example/tiny-repo", commit: sha2, files: [{ path: "src/alpha.ts", text: "NEW-COMMIT-TOKEN" }], skipped: 1 });
   assert(corpus.search("ALPHA-CROSSFILE", 8, "github/example/tiny-repo/").length === 0, "stale commit removed");
-  assert(corpus.search("NEW-COMMIT-TOKEN")[0]?.github?.commit === sha2, "new commit retrievable");
+  assert(corpus.search("NEW-COMMIT-TOKEN").length === 0, "new GitHub commit stays out of default search");
+  assert(corpus.search("NEW-COMMIT-TOKEN", 8, "github/example/tiny-repo/")[0]?.github?.commit === sha2, "new commit retrievable by explicit scope");
   await corpus.reindex();
-  assert(corpus.search("NEW-COMMIT-TOKEN")[0]?.github?.commit === sha2, "local reindex retains GitHub snapshot");
+  assert(corpus.search("NEW-COMMIT-TOKEN").length === 0, "reindex keeps default GitHub isolation");
+  assert(corpus.search("NEW-COMMIT-TOKEN", 8, "github/example/tiny-repo/")[0]?.github?.commit === sha2, "local reindex retains GitHub snapshot");
 
   corpus.close();
   console.log("rag fixture smoke ok", status.file_count, hits.length, {
