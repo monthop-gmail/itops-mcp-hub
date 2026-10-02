@@ -45,6 +45,7 @@ function envFlag(name: string, fallback = false): boolean {
 
 const hostEnabled = role === "admin" && envFlag("HOST_ENABLED", false);
 const legalEnabled = envFlag("LEGAL_ENABLED", false);
+const githubIngestEnabled = role === "admin" && envFlag("RAG_GITHUB_INGEST_ENABLED", false);
 
 function createBackends(): HubBackends {
   const rag = new BackendMcpClient("rag", requireEnv("RAG_MCP_URL"));
@@ -76,7 +77,7 @@ const backends = createBackends();
 
 function createServer(): McpServer {
   const server = new McpServer({ name, version: VERSION });
-  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite, hostEnabled, legalEnabled);
+  registerHubTools(server, backends, role, accountingProduct, odooAllowWrite, hostEnabled, legalEnabled, githubIngestEnabled);
   return server;
 }
 

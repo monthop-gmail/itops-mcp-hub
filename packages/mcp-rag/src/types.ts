@@ -55,6 +55,7 @@ export interface RagSource {
   ext: string;
   bytes: number;
   chunk_count: number;
+  github?: { repo: string; path: string; commit: string };
 }
 
 export interface RagHit {
@@ -64,6 +65,7 @@ export interface RagHit {
   page: number | null;
   score: number;
   excerpt: string;
+  github?: { repo: string; path: string; commit: string };
 }
 
 export interface RagChunk {
@@ -72,4 +74,5 @@ export interface RagChunk {
   title: string;
   page: number | null;
   text: string;
+  github?: { repo: string; path: string; commit: string };
 }

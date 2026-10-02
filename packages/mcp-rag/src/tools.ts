@@ -3,6 +3,7 @@ import { errorResult, jsonAndImageResult, jsonResult } from "@itops/mcp-common";
 import { z } from "zod";
 import type { RagCorpus } from "./corpus.js";
 import { isOcrStatus } from "./ocr.js";
+import { fetchGithubSnapshot } from "./github.js";
 
 const querySchema = z.string().min(2).describe("คำค้นภาษาไทยหรือรหัสงบ/ชื่อไฟล์");
 const limitSchema = z.number().int().min(1).max(30).optional().describe("จำนวนผลสูงสุด ค่าเริ่ม 8");
@@ -13,7 +14,25 @@ const prefixSchema = z
   .describe("กรอง path เช่น งบประมาณ-2570/กระทรวงมหาดไทย");
 const jobIdSchema = z.number().int().positive().describe("id จาก rag_list_ocr_queue");
 
-export function registerRagTools(server: McpServer, corpus: RagCorpus): void {
+export function registerRagTools(server: McpServer, corpus: RagCorpus, githubIngestEnabled = false): void {
+  if (githubIngestEnabled) {
+    server.tool(
+      "rag_ingest_github_repo",
+      "Admin POC: index a small public GitHub repo/ref resolved to an immutable commit SHA. Replaces prior snapshot for that repo.",
+      {
+        repo: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).describe("GitHub owner/name"),
+        ref: z.string().min(1).max(200).describe("Branch, tag, or commit SHA"),
+      },
+      async ({ repo, ref }) => {
+        try {
+          const snapshot = await fetchGithubSnapshot(repo, ref);
+          return jsonResult({ ok: true, ...corpus.indexGithubSnapshot(snapshot) });
+        } catch (error) {
+          return errorResult(error instanceof Error ? error.message : String(error));
+        }
+      },
+    );
+  }
   server.tool(
     "rag_get_status",
     "สถานะคลังเอกสาร RAG: fixture หรือโฟลเดอร์จริง จำนวนไฟล์/ชิ้น คิว OCR และว่าอินเด็กซ์พร้อมหรือยัง",

@@ -6,14 +6,14 @@ import { registerHubTools, type HubBackends, type HubRole } from "./tools.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 
-async function list(role: HubRole, legalEnabled: boolean): Promise<string[]> {
+async function list(role: HubRole, legalEnabled: boolean, githubEnabled = false): Promise<string[]> {
   const fake = { async callTool() { throw new Error("not used in tools/list"); } } as unknown as BackendMcpClient;
   const backends: HubBackends = {
     zabbix: fake, meshcentral: fake, express: fake, zktime: fake, pstack: fake, rag: fake,
     legal: legalEnabled ? fake : undefined,
   };
   const server = new McpServer({ name: `test-${role}`, version: "1" });
-  registerHubTools(server, backends, role, "express", false, false, legalEnabled);
+  registerHubTools(server, backends, role, "express", false, false, legalEnabled, githubEnabled);
   const client = new Client({ name: "smoke", version: "1" });
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   try {
@@ -32,5 +32,8 @@ for (const role of ["it", "admin", "accounting"] as const) {
   assert(!off.some((name) => name.startsWith("legal_")), `${role} default-off`);
   assert(on.includes("legal_search") && on.includes("legal_ask"), `${role} enabled`);
   assert(on.filter((name) => name.startsWith("rag_")).length === off.filter((name) => name.startsWith("rag_")).length, `${role} existing RAG contract`);
+  assert(!off.includes("rag_ingest_github_repo"), `${role} GitHub ingest default-off`);
+  const githubOn = await list(role, false, true);
+  assert(githubOn.includes("rag_ingest_github_repo") === (role === "admin"), `${role} GitHub ingest admin-only`);
 }
-console.log("hub role legal visibility/default-off smoke ok");
+console.log("hub role legal/GitHub visibility/default-off smoke ok");

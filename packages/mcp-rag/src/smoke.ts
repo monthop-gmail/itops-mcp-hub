@@ -4,6 +4,7 @@ import { fixtureIndexPath, writeFixtureCorpus } from "./fixture.js";
 import { SYNTHETIC_OCR_PDF } from "./ocr.js";
 import { parseOcrModelText, resolveTyphoonModel, runTyphoonOcr } from "./providers.js";
 import { foldThai } from "./thai-normalize.js";
+import { fetchGithubSnapshot, safeGithubPath } from "./github.js";
 
 function assert(cond: unknown, message: string): asserts cond {
   if (!cond) {
@@ -179,6 +180,36 @@ async function main(): Promise<void> {
   if (still.length < 1) {
     throw new Error("reindex dropped sidecar text");
   }
+
+  assert(safeGithubPath("src/alpha.ts"), "source should be eligible");
+  for (const path of [".env", "src/.env.production", "node_modules/pkg/index.ts", "dist/app.js", "keys/private.pem", "src/generated/api.ts", "src/secret.key"]) {
+    assert(!safeGithubPath(path), `unsafe GitHub path passed: ${path}`);
+  }
+  const sha1 = "a".repeat(40);
+  const sha2 = "b".repeat(40);
+  const blobs = [
+    { path: "src/alpha.ts", text: "export const crossFileToken = 'ALPHA-CROSSFILE';" },
+    { path: "docs/beta.md", text: "The ALPHA-CROSSFILE value is referenced in this document." },
+  ];
+  const mockFetch = (async (url: string | URL | Request) => {
+    const address = String(url);
+    if (address.includes("/commits/")) return Response.json({ sha: sha1 });
+    if (address.includes("/git/trees/")) return Response.json({ tree: blobs.map((item, index) => ({ path: item.path, type: "blob", mode: "100644", sha: index === 0 ? sha1 : sha2, size: Buffer.byteLength(item.text) })) });
+    const item = address.endsWith(sha1) ? blobs[0] : blobs[1];
+    return Response.json({ encoding: "base64", content: Buffer.from(item.text).toString("base64"), size: Buffer.byteLength(item.text) });
+  }) as typeof fetch;
+  const snapshot = await fetchGithubSnapshot("example/tiny-repo", "main", mockFetch);
+  assert(snapshot.commit === sha1 && snapshot.files.length === 2, "GitHub snapshot resolution");
+  corpus.indexGithubSnapshot(snapshot);
+  const crossHits = corpus.search("ALPHA-CROSSFILE", 8, "github/example/tiny-repo/");
+  assert(new Set(crossHits.map((hit) => hit.github?.path)).size === 2, "cross-file GitHub retrieval");
+  assert(crossHits.every((hit) => hit.github?.commit === sha1), "GitHub hit provenance");
+  assert(corpus.getChunk(crossHits[0].chunk_id)?.github?.repo === "example/tiny-repo", "GitHub chunk provenance");
+  corpus.indexGithubSnapshot({ repo: "example/tiny-repo", commit: sha2, files: [{ path: "src/alpha.ts", text: "NEW-COMMIT-TOKEN" }], skipped: 1 });
+  assert(corpus.search("ALPHA-CROSSFILE", 8, "github/example/tiny-repo/").length === 0, "stale commit removed");
+  assert(corpus.search("NEW-COMMIT-TOKEN")[0]?.github?.commit === sha2, "new commit retrievable");
+  await corpus.reindex();
+  assert(corpus.search("NEW-COMMIT-TOKEN")[0]?.github?.commit === sha2, "local reindex retains GitHub snapshot");
 
   corpus.close();
   console.log("rag fixture smoke ok", status.file_count, hits.length, {

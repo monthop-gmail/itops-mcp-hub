@@ -42,6 +42,7 @@ export function registerHubTools(
   odooAllowWrite = false,
   hostEnabled = false,
   legalEnabled = false,
+  githubIngestEnabled = false,
 ): void {
   if (role === "accounting") {
     if (accountingProduct === "allinone") {
@@ -112,6 +113,18 @@ export function registerHubTools(
     },
     async (args) => meshcentral.callTool("meshcentral_run_shell", args),
   );
+
+  if (githubIngestEnabled) {
+    server.tool(
+      "rag_ingest_github_repo",
+      "Admin POC: index a small public GitHub repo/ref into RAG, pinned to its commit SHA.",
+      {
+        repo: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+        ref: z.string().min(1).max(200),
+      },
+      async (args) => requireBackend(backends.rag, "rag").callTool("rag_ingest_github_repo", args),
+    );
+  }
 
   if (!hostEnabled) {
     return;
