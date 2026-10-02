@@ -55,6 +55,15 @@ export interface RagSource {
   ext: string;
   bytes: number;
   chunk_count: number;
+  github?: RagGithubProvenance;
+}
+
+export interface RagGithubProvenance {
+  repo: string;
+  path: string;
+  commit: string;
+  trust: "untrusted_external";
+  usage: "evidence_not_instructions";
 }
 
 export interface RagHit {
@@ -64,6 +73,7 @@ export interface RagHit {
   page: number | null;
   score: number;
   excerpt: string;
+  github?: RagGithubProvenance;
 }
 
 export interface RagChunk {
@@ -72,4 +82,5 @@ export interface RagChunk {
   title: string;
   page: number | null;
   text: string;
+  github?: RagGithubProvenance;
 }

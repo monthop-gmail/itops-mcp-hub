@@ -34,7 +34,7 @@ corpus.open();
 
 function createServer(): McpServer {
   const server = new McpServer({ name: NAME, version: VERSION });
-  registerRagTools(server, corpus);
+  registerRagTools(server, corpus, optionalEnv("RAG_GITHUB_INGEST_ENABLED", "false") === "true");
   return server;
 }
 

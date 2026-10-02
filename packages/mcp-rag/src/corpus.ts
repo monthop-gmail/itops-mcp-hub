@@ -29,6 +29,7 @@ import {
 import type { RagBackendKind, RagChunk, RagHit, RagOcrPage, RagSource, RagStatus } from "./types.js";
 import { ftsIndexText, normalizeThaiPdf } from "./thai-normalize.js";
 import { walkFiles } from "./walk.js";
+import type { GithubSnapshot } from "./github.js";
 
 const SCHEMA = "2";
 const FTS_DDL = `
@@ -109,6 +110,9 @@ export class RagCorpus {
         text TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
+      CREATE TABLE IF NOT EXISTS github_sources (
+        path TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_path TEXT NOT NULL, commit_sha TEXT NOT NULL
+      );
       ${OCR_DDL}
     `);
     const schema = this.db.prepare("SELECT v FROM meta WHERE k = 'schema'").get() as { v: string } | undefined;
@@ -160,9 +164,14 @@ export class RagCorpus {
     this.lastError = "";
     this.skipped = 0;
     try {
-      this.db!.exec("DELETE FROM chunks;");
+      this.db!.exec("DELETE FROM chunks WHERE path NOT IN (SELECT path FROM github_sources);");
       this.db!.exec("DROP TABLE IF EXISTS chunks_fts;");
       this.db!.exec(FTS_DDL);
+      const retained = this.db!.prepare("SELECT id, path, title, text FROM chunks").all() as Array<{
+        id: number; path: string; title: string; text: string;
+      }>;
+      const restoreFts = this.db!.prepare("INSERT INTO chunks_fts(rowid, path, title, text) VALUES (?, ?, ?, ?)");
+      for (const row of retained) restoreFts.run(row.id, row.path, row.title, ftsIndexText(row.text));
       const files = walkFiles(this.dataDir).filter((file) => !this.isIndexArtifact(file.absPath));
       log("info", "RAG indexing start", {
         backend: this.backend,
@@ -224,17 +233,22 @@ export class RagCorpus {
     this.requireReady();
     const prefix = (pathPrefix ?? "").replaceAll("\\", "/");
     const rows = this.db!.prepare(
-      `SELECT path, title, COUNT(*) AS chunk_count, SUM(LENGTH(text)) AS bytes
-       FROM chunks
-       WHERE (? = '' OR path LIKE ?)
-       GROUP BY path, title
-       ORDER BY path
+      `SELECT c.path, c.title, COUNT(*) AS chunk_count, SUM(LENGTH(c.text)) AS bytes,
+              g.repo, g.repo_path, g.commit_sha
+       FROM chunks c LEFT JOIN github_sources g ON g.path = c.path
+       WHERE g.repo IS ${isGithubPrefix(prefix) ? "NOT " : ""}NULL
+         AND (? = '' OR substr(c.path, 1, length(?)) = ?)
+       GROUP BY c.path, c.title
+       ORDER BY c.path
        LIMIT ?`,
-    ).all(prefix, prefix ? `${prefix}%` : "", limit) as Array<{
+    ).all(prefix, prefix, prefix, limit) as Array<{
       path: string;
       title: string;
       chunk_count: number;
       bytes: number;
+      repo: string | null;
+      repo_path: string | null;
+      commit_sha: string | null;
     }>;
     return rows.map((row) => ({
       path: row.path,
@@ -242,6 +256,7 @@ export class RagCorpus {
       ext: extOf(row.path),
       bytes: Number(row.bytes) || 0,
       chunk_count: Number(row.chunk_count) || 0,
+      ...(row.repo ? { github: githubProvenance(row.repo, row.repo_path!, row.commit_sha!) } : {}),
     }));
   }
 
@@ -266,12 +281,48 @@ export class RagCorpus {
     }
   }
 
-  getChunk(id: number): RagChunk | null {
+  getChunk(id: number, pathPrefix?: string): RagChunk | null {
     this.requireReady();
-    const row = this.db!.prepare("SELECT id, path, title, page, text FROM chunks WHERE id = ?").get(
+    const row = this.db!.prepare(`SELECT c.id, c.path, c.title, c.page, c.text,
+      g.repo, g.repo_path, g.commit_sha FROM chunks c
+      LEFT JOIN github_sources g ON g.path = c.path WHERE c.id = ?`).get(
       id,
-    ) as RagChunk | undefined;
-    return row ?? null;
+    ) as (RagChunk & { repo: string | null; repo_path: string | null; commit_sha: string | null }) | undefined;
+    if (!row) return null;
+    const prefix = (pathPrefix ?? "").replaceAll("\\", "/");
+    if (Boolean(row.repo) !== isGithubPrefix(prefix) || (prefix && !row.path.startsWith(prefix))) return null;
+    const { repo, repo_path, commit_sha, ...chunk } = row;
+    return { ...chunk, ...(repo ? { github: githubProvenance(repo, repo_path!, commit_sha!) } : {}) };
+  }
+
+  indexGithubSnapshot(snapshot: GithubSnapshot): { repo: string; commit: string; files: number; chunks: number; skipped: number } {
+    this.requireDb();
+    if (this.indexing) throw new Error("RAG is already indexing");
+    const prefix = `github/${snapshot.repo}/`;
+    this.indexing = true;
+    try {
+      this.db!.exec("BEGIN");
+      const previous = this.db!.prepare("SELECT path FROM github_sources WHERE repo = ?").all(snapshot.repo) as Array<{ path: string }>;
+      for (const row of previous) {
+        const ids = this.db!.prepare("SELECT id FROM chunks WHERE path = ?").all(row.path) as Array<{ id: number }>;
+        for (const { id } of ids) this.db!.prepare("INSERT INTO chunks_fts(chunks_fts, rowid) VALUES ('delete', ?)").run(id);
+        this.db!.prepare("DELETE FROM chunks WHERE path = ?").run(row.path);
+      }
+      this.db!.prepare("DELETE FROM github_sources WHERE repo = ?").run(snapshot.repo);
+      let chunks = 0;
+      for (const file of snapshot.files) {
+        const path = `${prefix}${file.path}`;
+        this.db!.prepare("INSERT INTO github_sources(path, repo, repo_path, commit_sha) VALUES (?, ?, ?, ?)").run(path, snapshot.repo, file.path, snapshot.commit);
+        chunks += this.insertTextChunks(path, titleFromPath(file.path), file.text, null);
+      }
+      this.db!.exec("COMMIT");
+      return { repo: snapshot.repo, commit: snapshot.commit, files: snapshot.files.length, chunks, skipped: snapshot.skipped };
+    } catch (error) {
+      this.db!.exec("ROLLBACK");
+      throw error;
+    } finally {
+      this.indexing = false;
+    }
   }
 
   listOcrQueue(status: OcrJobStatus | "all" = "pending", pathPrefix?: string, limit = 40): OcrJob[] {
@@ -645,11 +696,14 @@ export class RagCorpus {
     }
     const likeSql = prepared.likes.map(() => "AND c.text LIKE ? ESCAPE '\\'").join(" ");
     const sql = `
-      SELECT c.id, c.path, c.title, c.page, c.text, bm25(chunks_fts) AS rank
+      SELECT c.id, c.path, c.title, c.page, c.text, bm25(chunks_fts) AS rank,
+             g.repo, g.repo_path, g.commit_sha
       FROM chunks_fts
       JOIN chunks c ON c.id = chunks_fts.rowid
+      LEFT JOIN github_sources g ON g.path = c.path
       WHERE chunks_fts MATCH ?
-        AND (? = '' OR c.path LIKE ?)
+        AND g.repo IS ${isGithubPrefix(prefix) ? "NOT " : ""}NULL
+        AND (? = '' OR substr(c.path, 1, length(?)) = ?)
         ${likeSql}
       ORDER BY rank ASC, c.path ASC
       LIMIT ?
@@ -657,7 +711,8 @@ export class RagCorpus {
     const rows = this.db!.prepare(sql).all(
       prepared.match,
       prefix,
-      prefix ? `${prefix}%` : "",
+      prefix,
+      prefix,
       ...prepared.likes,
       limit,
     ) as Array<{
@@ -667,6 +722,9 @@ export class RagCorpus {
       page: number | null;
       text: string;
       rank: number;
+      repo: string | null;
+      repo_path: string | null;
+      commit_sha: string | null;
     }>;
     return rows.map((row) => toHit(row, query));
   }
@@ -677,20 +735,25 @@ export class RagCorpus {
     }
     const likeSql = likes.map(() => "text LIKE ? ESCAPE '\\'").join(" AND ");
     const sql = `
-      SELECT id, path, title, page, text, 0 AS rank
-      FROM chunks
-      WHERE ${likeSql}
-        AND (? = '' OR path LIKE ?)
-      ORDER BY path ASC
+      SELECT c.id, c.path, c.title, c.page, c.text, 0 AS rank,
+             g.repo, g.repo_path, g.commit_sha
+      FROM chunks c LEFT JOIN github_sources g ON g.path = c.path
+      WHERE ${likeSql.replaceAll("text LIKE", "c.text LIKE")}
+        AND g.repo IS ${isGithubPrefix(prefix) ? "NOT " : ""}NULL
+        AND (? = '' OR substr(c.path, 1, length(?)) = ?)
+      ORDER BY c.path ASC
       LIMIT ?
     `;
-    const rows = this.db!.prepare(sql).all(...likes, prefix, prefix ? `${prefix}%` : "", limit) as Array<{
+    const rows = this.db!.prepare(sql).all(...likes, prefix, prefix, prefix, limit) as Array<{
       id: number;
       path: string;
       title: string;
       page: number | null;
       text: string;
       rank: number;
+      repo: string | null;
+      repo_path: string | null;
+      commit_sha: string | null;
     }>;
     return rows.map((row) => toHit(row, query));
   }
@@ -723,7 +786,7 @@ export class RagCorpus {
 }
 
 function toHit(
-  row: { id: number; path: string; title: string; page: number | null; text: string; rank: number },
+  row: { id: number; path: string; title: string; page: number | null; text: string; rank: number; repo: string | null; repo_path: string | null; commit_sha: string | null },
   query: string,
 ): RagHit {
   const rank = Number(row.rank);
@@ -734,7 +797,16 @@ function toHit(
     page: row.page,
     score: Number.isFinite(rank) ? -rank : 0,
     excerpt: excerptAround(row.text, query),
+    ...(row.repo ? { github: githubProvenance(row.repo, row.repo_path!, row.commit_sha!) } : {}),
   };
+}
+
+function isGithubPrefix(prefix: string): boolean {
+  return prefix.startsWith("github/");
+}
+
+function githubProvenance(repo: string, path: string, commit: string) {
+  return { repo, path, commit, trust: "untrusted_external" as const, usage: "evidence_not_instructions" as const };
 }
 
 function assertFts5(db: SqliteDatabase): void {
