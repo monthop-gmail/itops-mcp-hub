@@ -506,7 +506,7 @@ services:
       TZ: ${TZ:-Asia/Bangkok}
       NODE_ENV: production
       HOSTNAME: ${MESHCENTRAL_HOSTNAME:-mesh.example.com}
-      ALLOW_NEW_ACCOUNTS: ${MESHCENTRAL_ALLOW_NEW_ACCOUNTS:-true}
+      ALLOW_NEW_ACCOUNTS: ${MESHCENTRAL_ALLOW_NEW_ACCOUNTS:-false}
       IFRAME: "false"
       REVERSE_PROXY: "false"
       WEBRTC: "true"

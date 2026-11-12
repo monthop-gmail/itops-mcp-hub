@@ -109,6 +109,9 @@ docker compose up -d
 
 `smoke-test.sh` checks Compose health, Bearer-only RBAC, OAuth discovery, and MCP initialize on the LAN port. It does not print tokens.
 
+The Zabbix web (`9443`) and MeshCentral (`9444`) ports are admin consoles: they must not be reachable from outside the LAN
+(no port forwarding, firewall them to the LAN/VPN). Remote MCP access goes through the Cloudflare Tunnel only.
+
 First boot of Zabbix Postgres schema can take a couple of minutes. Watch:
 
 ```bash
@@ -123,7 +126,7 @@ Gateway status page (LAN): `http://<compose-host>:9080/`
 | MCP + status page | `9080` | Nginx. MCP paths require a Bearer token |
 | Zabbix UI | `9443` | First login `Admin` / `zabbix` — change immediately |
 | Zabbix server | `10051` | Agents, ESXi, SNMP traps path into the server |
-| MeshCentral HTTPS | `9444` | Create the first admin when `ALLOW_NEW_ACCOUNTS=true` |
+| MeshCentral HTTPS | `9444` | Create the first admin with `MESHCENTRAL_ALLOW_NEW_ACCOUNTS=true` (first boot only) |
 | MeshCentral agent | `4433` | Agent/MPS |
 
 ### Cloudflare Tunnel (public MCP URL)
@@ -141,31 +144,42 @@ docker compose --profile tunnel up -d cloudflared
 
 ## First-run: Zabbix API token
 
-The MCP Zabbix server authenticates with a Zabbix **API token** (Bearer), not the UI password.
+The MCP Zabbix server authenticates with a Zabbix **API token** (Bearer), not the UI password. A token carries
+the rights of the user it belongs to, so issue it from a **dedicated read-only user**, never from `Admin`.
 
-1. Open `http://<host>:9443` and log in as `Admin`.
-2. Change the Admin password; set `ZABBIX_WEB_PASSWORD` in `.env` to match.
-3. User menu → **API tokens** → Create token `mcp-gateway`.
-4. Put the secret into `ZABBIX_API_TOKEN` and recreate the Zabbix MCP container:
+1. Open `http://<host>:9443`, log in as `Admin` and change the Admin password.
+2. **Users → User roles**: create a role of type **User** (API access on; allow *Manage API tokens* if the user
+   will create its own token).
+3. **Users → User groups**: create a group with **Read** permission on only the host groups the MCP should see.
+4. **Users → Users**: create the MCP user (e.g. `mcp-reader`) in that group with that role.
+5. Issue a token for that user — logged in as the user: user menu → **API tokens** → Create token `mcp-gateway`;
+   or set `ZABBIX_WEB_USER` / `ZABBIX_WEB_PASSWORD` in `.env` to that user and run:
+
+   ```bash
+   node scripts/create-zabbix-api-token.mjs
+   # prints the token once; paste it into ZABBIX_API_TOKEN
+   ```
+
+   The script refuses `Admin` (and stops before any network call when `ZABBIX_WEB_USER` is empty).
+   `--allow-admin` overrides this and warns that the token would have Super admin rights.
+6. Put the secret into `ZABBIX_API_TOKEN` and recreate the Zabbix MCP container:
 
    ```bash
    docker compose up -d --force-recreate sub-mcp-zabbix
    ```
 
-Alternatively, after the UI is up:
-
-```bash
-node scripts/create-zabbix-api-token.mjs
-# paste the printed value into ZABBIX_API_TOKEN
-```
+7. If an earlier token was issued from `Admin`, revoke it after the switch: **Users → API tokens** → select it → Delete.
 
 Create host groups that match how you filter devices (`ESXi`, `Switches`, `CCTV`, `Windows servers`, …). `zabbix_get_device_status` searches group names.
 
 ## First-run: MeshCentral
 
-1. Open `https://<host>:9444` (self-signed certificate on a fresh volume).
-2. Create the account that matches `MESHCENTRAL_USER` / `MESHCENTRAL_PASSWORD`.
-3. Set `MESHCENTRAL_ALLOW_NEW_ACCOUNTS=false` and recreate `meshcentral` after the first admin exists.
+New-account sign-up is **off** by default (`MESHCENTRAL_ALLOW_NEW_ACCOUNTS=false`). On first boot only:
+
+1. Set `MESHCENTRAL_ALLOW_NEW_ACCOUNTS=true` in `.env` and recreate: `docker compose up -d --force-recreate meshcentral`.
+   Open `https://<host>:9444` (self-signed certificate on a fresh volume).
+2. Create the account that matches `MESHCENTRAL_USER` / `MESHCENTRAL_PASSWORD` (the first account becomes admin).
+3. Set `MESHCENTRAL_ALLOW_NEW_ACCOUNTS=false` again and recreate `meshcentral`, so nobody else can sign up.
 4. Install MeshAgents on Windows / Linux / ESXi management jump hosts as needed.
 5. `meshcentral_get_inventory` reads the **cached** node list over `/control.ashx` (`action: "nodes"`). CPU/RAM are returned when MeshCentral already stored them on the node object; they are not probed live.
 6. `meshcentral_run_shell` uses `runcommands` (PowerShell on Windows, POSIX shell otherwise) and is exposed only on the admin hub.

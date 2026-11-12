@@ -3,10 +3,12 @@
  * Create a Zabbix 7 API token for the MCP gateway.
  *
  * Usage (from the compose host, after Zabbix web is up):
- *   node scripts/create-zabbix-api-token.mjs
+ *   node scripts/create-zabbix-api-token.mjs [--allow-admin]
  *
  * Reads ZABBIX_WEB_LAN_PORT, ZABBIX_WEB_USER, ZABBIX_WEB_PASSWORD from `.env`.
- * Prints the token to stdout once; store it as ZABBIX_API_TOKEN.
+ * ZABBIX_WEB_USER must be a dedicated read-only user (role type User, Read on the needed host groups);
+ * the token gets exactly that user's permissions. `Admin` is refused unless --allow-admin is given.
+ * Prints the token to stdout once; store it as ZABBIX_API_TOKEN. The password is never printed.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -35,8 +37,31 @@ function loadDotEnv(path) {
 
 const fileEnv = loadDotEnv(resolve(process.cwd(), ".env"));
 const port = fileEnv.ZABBIX_WEB_LAN_PORT || "9443";
-const username = fileEnv.ZABBIX_WEB_USER || "Admin";
-const password = fileEnv.ZABBIX_WEB_PASSWORD || "zabbix";
+const username = (fileEnv.ZABBIX_WEB_USER || "").trim();
+const password = fileEnv.ZABBIX_WEB_PASSWORD || "";
+const allowAdmin = process.argv.slice(2).includes("--allow-admin");
+
+// Checked before any network call.
+if (!username || !password) {
+  process.stderr.write(
+    "ZABBIX_WEB_USER and ZABBIX_WEB_PASSWORD must be set in .env.\n" +
+      "Create a dedicated read-only Zabbix user for the MCP gateway (role type User, Read permission on the\n" +
+      "host groups it should see; its role must allow managing API tokens), put its name and password in .env,\n" +
+      "then run this script again. Do not use Admin.\n",
+  );
+  process.exit(1);
+}
+if (username.toLowerCase() === "admin") {
+  if (!allowAdmin) {
+    process.stderr.write(
+      "Refusing to create a token for Admin: it would carry Super admin rights.\n" +
+        "Use a dedicated read-only user, or pass --allow-admin if you really mean it.\n",
+    );
+    process.exit(1);
+  }
+  process.stderr.write("WARNING: --allow-admin given; this token will have Super admin rights. Prefer a read-only user.\n");
+}
+
 const url = process.env.ZABBIX_API_URL || `http://127.0.0.1:${port}/api_jsonrpc.php`;
 
 async function rpc(method, params, auth) {
